@@ -57,11 +57,19 @@ async fn handle_action_request(
                 error,
             },
         },
-        "email_list" => ActionResponse {
-            action_id: req.action_id,
-            status: ActionStatus::ActionError as i32,
-            data_json: Vec::new(),
-            error: "email_list is not implemented in v0.1".to_string(),
+        "email_list" => match handler::handle_email_list(client, &req.params_json).await {
+            Ok(data_json) => ActionResponse {
+                action_id: req.action_id,
+                status: ActionStatus::ActionOk as i32,
+                data_json,
+                error: String::new(),
+            },
+            Err(error) => ActionResponse {
+                action_id: req.action_id,
+                status: ActionStatus::ActionError as i32,
+                data_json: Vec::new(),
+                error,
+            },
         },
         other => ActionResponse {
             action_id: req.action_id,
@@ -494,15 +502,86 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn email_list_is_stub_error() {
+    async fn email_list_end_to_end_stub() {
         let shim = start_plugin(secret_found(VAULT_PASS)).await;
 
+        let out = shim
+            .call(
+                "email_list",
+                serde_json::json!({
+                    "imap_user": "user@example.com",
+                    "credentials_env": "EMAIL_SMTP_PASS",
+                    "mailbox": "INBOX",
+                    "limit": 2
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(out["mailbox"], "INBOX");
+        assert_eq!(out["count"], 2);
+        assert_eq!(out["stubbed"], true);
+        assert_eq!(out["emails"].as_array().unwrap().len(), 2);
+        assert_eq!(out["emails"][0]["subject"], "Stub email 1");
+        assert_eq!(out["emails"][1]["subject"], "Stub email 2");
+
+        let secret_gets = shim.secret_gets().await;
+        assert_eq!(secret_gets.len(), 1);
+        assert_eq!(secret_gets[0]["name"], "EMAIL_SMTP_PASS");
+
+        let raw = serde_json::to_string(&out).unwrap();
+        assert!(!raw.contains(VAULT_PASS), "vault password leaked: {raw}");
+        assert!(!raw.contains(ENV_DECOY_PASS), "decoy leaked: {raw}");
+    }
+
+    #[tokio::test]
+    async fn email_list_unallowlisted_rejected() {
+        let shim = start_plugin(secret_found(VAULT_PASS)).await;
         let err = shim
-            .call("email_list", serde_json::json!({}))
+            .call(
+                "email_list",
+                serde_json::json!({
+                    "imap_user": "user@example.com",
+                    "credentials_env": "UNLISTED_CRED",
+                }),
+            )
             .await
             .unwrap_err();
+        assert!(err.contains("allowlist"), "error was: {err}");
+        assert!(shim.secret_gets().await.is_empty());
+    }
 
-        assert!(err.contains("email_list"), "error was: {err}");
+    #[tokio::test]
+    async fn email_list_missing_imap_user_rejected() {
+        let shim = start_plugin(secret_found(VAULT_PASS)).await;
+        let err = shim
+            .call(
+                "email_list",
+                serde_json::json!({
+                    "credentials_env": "EMAIL_SMTP_PASS",
+                }),
+            )
+            .await
+            .unwrap_err();
+        assert!(err.contains("imap_user"), "error was: {err}");
+        assert!(shim.secret_gets().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn email_list_invalid_mailbox_rejected() {
+        let shim = start_plugin(secret_found(VAULT_PASS)).await;
+        let err = shim
+            .call(
+                "email_list",
+                serde_json::json!({
+                    "imap_user": "user@example.com",
+                    "credentials_env": "EMAIL_SMTP_PASS",
+                    "mailbox": "../INBOX"
+                }),
+            )
+            .await
+            .unwrap_err();
+        assert!(err.contains("mailbox"), "error was: {err}");
         assert!(shim.secret_gets().await.is_empty());
     }
 }

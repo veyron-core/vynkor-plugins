@@ -99,13 +99,80 @@
       "name": "email_list",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "imap_host": {
+            "type": "string",
+            "description": "Optional IMAP host (defaults to localhost)."
+          },
+          "imap_port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "default": 993,
+            "description": "Optional IMAP port. Default 993 (implicit TLS)."
+          },
+          "imap_user": {
+            "type": "string",
+            "description": "Required IMAP auth username (often the email address)."
+          },
+          "credentials_env": {
+            "type": "string",
+            "description": "Required. Name under which the email process resolves the IMAP password at call time (vault-first, env-var fallback; never a literal password). Must be on the operator's EMAIL_PLUGIN_ALLOWED_CRED_ENVS allowlist."
+          },
+          "mailbox": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "default": "INBOX",
+            "description": "Mailbox name. Default INBOX. Must not contain '..', '/' or '\\'."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10,
+            "description": "Max messages to return. Default 10, capped at 50."
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30000,
+            "default": 30000,
+            "description": "IMAP operation timeout. Default and cap 30000."
+          }
+        },
+        "required": ["imap_user", "credentials_env"],
         "additionalProperties": true
       },
       "output": {
         "type": "object",
-        "properties": {},
-        "additionalProperties": true
+        "properties": {
+          "emails": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "uid": { "type": "integer" },
+                "from": { "type": "string" },
+                "to": { "type": "string" },
+                "subject": { "type": "string" },
+                "date": { "type": "string" },
+                "snippet": { "type": "string" }
+              },
+              "required": ["uid", "from", "to", "subject", "date", "snippet"]
+            }
+          },
+          "mailbox": { "type": "string" },
+          "count": { "type": "integer" },
+          "stubbed": {
+            "type": "boolean",
+            "description": "true when stub mode was active and no real IMAP connection was made."
+          },
+          "imap_host": { "type": "string" },
+          "imap_port": { "type": "integer" }
+        },
+        "required": ["emails", "mailbox", "count"],
+        "additionalProperties": false
       }
     }
   ],

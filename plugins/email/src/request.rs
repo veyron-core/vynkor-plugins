@@ -18,6 +18,22 @@ pub const DEFAULT_SMTP_HOST: &str = "localhost";
 /// Default `from` address when the caller omits both `from` and `smtp_user`.
 pub const DEFAULT_FROM: &str = "vynkor@localhost";
 
+/// Default IMAP host when the caller omits `imap_host`.
+pub const DEFAULT_IMAP_HOST: &str = "localhost";
+
+/// Default IMAP port (implicit TLS) when the caller omits `imap_port`.
+pub const DEFAULT_IMAP_PORT: u16 = 993;
+
+/// Default mailbox name when the caller omits `mailbox`.
+pub const DEFAULT_MAILBOX: &str = "INBOX";
+
+/// Default and maximum number of messages to return for `email_list`.
+pub const DEFAULT_LIST_LIMIT: usize = 10;
+pub const MAX_LIST_LIMIT: usize = 50;
+
+/// Hard ceiling on mailbox name length, in chars.
+pub const MAX_MAILBOX_CHARS: usize = 100;
+
 /// SMTP connection timeout ceiling (and default), in ms.
 pub const MAX_TIMEOUT_MS: u64 = 30_000;
 
@@ -163,6 +179,91 @@ pub fn parse_request(params_json: &[u8]) -> Result<EmailSendParams, String> {
         smtp_host,
         smtp_port,
         smtp_user,
+        timeout_ms,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmailListParams {
+    pub imap_host: String,
+    pub imap_port: u16,
+    pub imap_user: String,
+    pub credentials_env: String,
+    pub mailbox: String,
+    pub limit: usize,
+    pub timeout_ms: u64,
+}
+
+pub fn parse_email_list_request(params_json: &[u8]) -> Result<EmailListParams, String> {
+    #[derive(serde::Deserialize)]
+    struct Raw {
+        imap_host: Option<String>,
+        imap_port: Option<u16>,
+        imap_user: Option<String>,
+        credentials_env: Option<String>,
+        mailbox: Option<String>,
+        limit: Option<usize>,
+        timeout_ms: Option<u64>,
+    }
+
+    let raw: Raw =
+        serde_json::from_slice(params_json).map_err(|e| format!("invalid JSON: {e}"))?;
+
+    let credentials_env = raw
+        .credentials_env
+        .ok_or("missing required field: credentials_env")?;
+    if credentials_env.is_empty() {
+        return Err("credentials_env must not be empty".to_string());
+    }
+
+    let imap_user = raw
+        .imap_user
+        .ok_or("missing required field: imap_user")?;
+    let imap_user = imap_user.trim().to_string();
+    if imap_user.is_empty() {
+        return Err("imap_user must not be empty".to_string());
+    }
+
+    let imap_host = match raw.imap_host {
+        Some(h) if !h.trim().is_empty() => h.trim().to_string(),
+        _ => DEFAULT_IMAP_HOST.to_string(),
+    };
+
+    let imap_port = raw.imap_port.unwrap_or(DEFAULT_IMAP_PORT);
+    if imap_port == 0 {
+        return Err("imap_port must be non-zero".to_string());
+    }
+
+    let mailbox = match raw.mailbox {
+        Some(m) if !m.trim().is_empty() => m.trim().to_string(),
+        _ => DEFAULT_MAILBOX.to_string(),
+    };
+    let mailbox_chars = mailbox.chars().count();
+    if mailbox_chars == 0 || mailbox_chars > MAX_MAILBOX_CHARS {
+        return Err(format!(
+            "mailbox must be 1-{MAX_MAILBOX_CHARS} chars (got {mailbox_chars})"
+        ));
+    }
+    if mailbox.contains("..") || mailbox.contains('/') || mailbox.contains('\\') {
+        return Err("mailbox must not contain '..', '/' or '\\'".to_string());
+    }
+
+    let limit = raw.limit.unwrap_or(DEFAULT_LIST_LIMIT);
+    if limit == 0 || limit > MAX_LIST_LIMIT {
+        return Err(format!(
+            "limit must be 1-{MAX_LIST_LIMIT} (got {limit})"
+        ));
+    }
+
+    let timeout_ms = raw.timeout_ms.unwrap_or(MAX_TIMEOUT_MS).min(MAX_TIMEOUT_MS);
+
+    Ok(EmailListParams {
+        imap_host,
+        imap_port,
+        imap_user,
+        credentials_env,
+        mailbox,
+        limit,
         timeout_ms,
     })
 }
@@ -362,5 +463,88 @@ mod tests {
     fn is_allowed_cred_env_rejects_everything_when_empty() {
         let allowed = parse_allowed_cred_envs("");
         assert!(!is_allowed_cred_env("EMAIL_SMTP_PASS", &allowed));
+    }
+
+    fn valid_list_json() -> serde_json::Value {
+        serde_json::json!({
+            "imap_user": "user@example.com",
+            "credentials_env": "EMAIL_SMTP_PASS",
+        })
+    }
+
+    #[test]
+    fn accepts_minimal_list_request_with_defaults() {
+        let params = parse_email_list_request(valid_list_json().to_string().as_bytes()).unwrap();
+        assert_eq!(params.imap_user, "user@example.com");
+        assert_eq!(params.credentials_env, "EMAIL_SMTP_PASS");
+        assert_eq!(params.imap_host, DEFAULT_IMAP_HOST);
+        assert_eq!(params.imap_port, DEFAULT_IMAP_PORT);
+        assert_eq!(params.mailbox, DEFAULT_MAILBOX);
+        assert_eq!(params.limit, DEFAULT_LIST_LIMIT);
+        assert_eq!(params.timeout_ms, MAX_TIMEOUT_MS);
+    }
+
+    #[test]
+    fn parses_list_optional_fields() {
+        let mut j = valid_list_json();
+        j["imap_host"] = "imap.example.com".into();
+        j["imap_port"] = 143.into();
+        j["mailbox"] = "Sent".into();
+        j["limit"] = 25.into();
+        j["timeout_ms"] = 5000.into();
+        let params = parse_email_list_request(j.to_string().as_bytes()).unwrap();
+        assert_eq!(params.imap_host, "imap.example.com");
+        assert_eq!(params.imap_port, 143);
+        assert_eq!(params.mailbox, "Sent");
+        assert_eq!(params.limit, 25);
+        assert_eq!(params.timeout_ms, 5000);
+    }
+
+    #[test]
+    fn rejects_list_missing_imap_user() {
+        let mut j = valid_list_json();
+        j.as_object_mut().unwrap().remove("imap_user");
+        let err = parse_email_list_request(j.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("imap_user"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_list_missing_credentials_env() {
+        let mut j = valid_list_json();
+        j.as_object_mut().unwrap().remove("credentials_env");
+        let err = parse_email_list_request(j.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("credentials_env"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_list_invalid_mailbox_traversal() {
+        let mut j = valid_list_json();
+        j["mailbox"] = "../INBOX".into();
+        let err = parse_email_list_request(j.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("mailbox"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_list_zero_limit() {
+        let mut j = valid_list_json();
+        j["limit"] = 0.into();
+        let err = parse_email_list_request(j.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("limit"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_list_limit_above_max() {
+        let mut j = valid_list_json();
+        j["limit"] = (MAX_LIST_LIMIT + 1).into();
+        let err = parse_email_list_request(j.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("limit"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_list_zero_imap_port() {
+        let mut j = valid_list_json();
+        j["imap_port"] = 0.into();
+        let err = parse_email_list_request(j.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("imap_port"), "error was: {err}");
     }
 }
