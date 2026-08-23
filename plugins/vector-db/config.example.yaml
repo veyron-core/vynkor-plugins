@@ -5,8 +5,21 @@ busy_timeout_ms: 5000                 # SQLite busy timeout
 max_response_bytes: 4194304           # 4 MiB, vec_query result size cap
 max_db_bytes: 268435456               # 256 MiB, hard per-caller disk quota (SQLITE_FULL past this); 0 disables
 default_dim: 384                      # default embedding dimension (BGE-small, MiniLM)
-# v0.1 uses deterministic fake embeddings (hash-based, L2-normalized) for offline use.
-# v0.2 will add: local ONNX (fastembed: bge-small-en-v1.5) + cloud embeddings via network+secrets
-#   VECTOR_DB_MODEL=bge-small-en-v1.5
-#   VECTOR_DB_MODEL_DIR=/opt/models/bge-small  # custom ONNX + tokenizer.json
-#   VECTOR_DB_ALLOWED_KEY_ENVS=OPENAI_API_KEY  # for cloud provider
+# v0.1: offline fake embeddings (hash-based, L2-normalized) — no model files, no network.
+#       For real embeddings, use the `ai` plugin's `embedding` action, then pass the
+#       returned vector to vec_upsert/vec_query:
+#
+#       1) ai embedding {provider:"openai", model:"text-embedding-3-small",
+#                        base_url:"https://api.openai.com/v1",
+#                        api_key_env:"OPENAI_API_KEY", input:"hello world"}
+#          → {embedding:[...], dim:1536}
+#       2) vec_upsert {collection:"mem", id:"1", vector:[...], text:"hello world"}
+#       3) vec_query {collection:"mem", vector:[...], top_k:5}  # or text (fake) for offline
+#
+# v0.1 keeps version 0.1.0; ai embedding is the pluggable model layer.
+# Future v0.2: optional direct integration via VECTOR_DB_EMBED_* envs
+#   VECTOR_DB_EMBED_MODEL=text-embedding-3-small
+#   VECTOR_DB_EMBED_PROVIDER=openai
+#   VECTOR_DB_EMBED_BASE_URL=https://api.openai.com/v1
+#   VECTOR_DB_EMBED_API_KEY_ENV=OPENAI_API_KEY  # must be in AI_PLUGIN_ALLOWED_KEY_ENVS
+#   VECTOR_DB_EMBED_TIMEOUT_MS=10000

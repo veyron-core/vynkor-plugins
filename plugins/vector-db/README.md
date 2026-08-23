@@ -4,9 +4,24 @@ Embedding upsert + similarity search for Vynkor plugins, gated by `PERMISSION_ST
 One SQLite file per calling plugin — callers cannot see each other's collections.
 Brute-force cosine on L2-normalized vectors, per-collection dimension enforcement.
 
-`v0.1` uses deterministic fake embeddings (hash-based, offline, no model files) so the
-plugin is fully offline and has no native deps. `v0.2` will add `fastembed` (ONNX
-`bge-small-en-v1.5` / `all-MiniLM-L6-v2`) + cloud embeddings via `network`+`secrets`.
+`v0.1` is offline by default: deterministic fake embeddings (hash-based, L2-normalized) so the
+plugin has no native deps and works without network. For real vectors, plug in the `ai`
+plugin's `embedding` action — pass the returned `vector` to `vec_upsert`/`vec_query`:
+
+```json
+// 1) get embedding from ai (provider-agnostic, vault-first keys, same as chat_completion)
+{ "action": "embedding", "provider": "openai", "model": "text-embedding-3-small",
+  "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY", "input": "hello world" }
+// → { "embedding": [0.012, -0.03, ...], "dim": 1536, "model": "text-embedding-3-small" }
+// 2) store it
+{ "action": "vec_upsert", "collection": "mem", "id": "1", "text": "hello world", "vector": [0.012, ...] }
+// 3) query by vector (real) or by text (fake offline)
+{ "action": "vec_query", "collection": "mem", "vector": [0.012, ...], "top_k": 5 }
+```
+
+`ai` supports any OpenAI-compatible embeddings endpoint (OpenAI, Voyage, Ollama `nomic-embed-text` at `http://localhost:11434/v1` with empty key). Version stays `0.1.0` — the model is pluggable via `ai`, not baked into `vector-db`.
+
+`v0.2` will optionally add direct `VECTOR_DB_EMBED_*` envs for single-call `vec_upsert {text}` via `ai` internally.
 
 ## Actions
 

@@ -12,6 +12,7 @@ pub fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+#[derive(Debug, Clone)]
 pub struct DbConfig {
     pub data_dir: PathBuf,
     pub pool_size: u32,
