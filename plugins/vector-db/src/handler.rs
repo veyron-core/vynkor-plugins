@@ -1,9 +1,91 @@
 use serde_json::{json, Value};
 use sqlx::Row;
+use tokio::sync::{mpsc, oneshot};
 
+use crate::config::EmbedConfig;
 use crate::db::{sanitize_caller_id, sanitize_collection, sanitize_id, DbPools};
 use crate::embed::{cosine_similarity, fake_embed, validate_and_normalize_vector};
 use crate::request::{parse_request, VectorRequest};
+
+#[derive(Clone)]
+pub struct Rpc {
+    tx: mpsc::Sender<RpcCall>,
+}
+
+pub struct RpcCall {
+    pub action: String,
+    pub params_json: Vec<u8>,
+    pub timeout_ms: u32,
+    pub reply: oneshot::Sender<Result<Value, String>>,
+}
+
+impl Rpc {
+    pub fn new(tx: mpsc::Sender<RpcCall>) -> Self {
+        Self { tx }
+    }
+    pub async fn call(&self, action: &str, params: Value, timeout_ms: u32) -> Result<Value, String> {
+        let params_json = serde_json::to_vec(&params).map_err(|e| format!("failed to encode {action} params: {e}"))?;
+        let (reply, rx) = oneshot::channel();
+        self.tx
+            .send(RpcCall {
+                action: action.to_string(),
+                params_json,
+                timeout_ms,
+                reply,
+            })
+            .await
+            .map_err(|_| format!("embedding via ai aborted: serve loop shutting down"))?;
+        let effective = if timeout_ms == 0 { 10000 } else { timeout_ms };
+        match tokio::time::timeout(std::time::Duration::from_millis(effective as u64), rx).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err("embedding via ai aborted: serve loop shutting down".to_string()),
+            Err(_) => Err(format!("ai.embedding timed out after {effective} ms")),
+        }
+    }
+}
+
+async fn embed_via_ai_or_fake(
+    text: &str,
+    dim_hint: Option<usize>,
+    default_dim: usize,
+    rpc: Option<&Rpc>,
+    embed_cfg: Option<&EmbedConfig>,
+) -> Result<Vec<f32>, String> {
+    if let (Some(r), Some(cfg)) = (rpc, embed_cfg) {
+        if cfg.enabled {
+            let params = serde_json::json!({
+                "provider": cfg.provider,
+                "model": cfg.model,
+                "base_url": cfg.base_url,
+                "api_key_env": cfg.api_key_env,
+                "input": text,
+                "timeout_ms": cfg.timeout_ms,
+            });
+            match r.call("embedding", params, cfg.timeout_ms).await {
+                Ok(v) => {
+                    let arr = v.get("embedding").ok_or("ai embedding missing field embedding")?;
+                    let vec: Vec<f32> = serde_json::from_value(arr.clone())
+                        .map_err(|e| format!("ai embedding malformed embedding: {e}"))?;
+                    if let Some(d) = dim_hint {
+                        if vec.len() != d {
+                            return Err(format!("ai embedding dim mismatch: expected {d}, got {}", vec.len()));
+                        }
+                    }
+                    let mut normed = vec;
+                    if !crate::embed::normalize(&mut normed) {
+                        return Err("ai embedding zero norm".to_string());
+                    }
+                    return Ok(normed);
+                }
+                Err(e) => {
+                    eprintln!("[vector-db] ai embedding failed ({}), falling back to fake", e);
+                }
+            }
+        }
+    }
+    let d = dim_hint.unwrap_or(default_dim);
+    Ok(fake_embed(text, d))
+}
 
 pub struct Handler {
     pools: DbPools,
@@ -26,7 +108,20 @@ impl Handler {
         action: &str,
         params_json: &[u8],
     ) -> Result<Value, String> {
-        self.handle_inner(caller_plugin_id, action, params_json).await
+        self.handle_inner(caller_plugin_id, action, params_json, None, None)
+            .await
+    }
+
+    pub async fn handle_with_rpc(
+        &self,
+        caller_plugin_id: &str,
+        action: &str,
+        params_json: &[u8],
+        rpc: Option<Rpc>,
+        embed_cfg: Option<&EmbedConfig>,
+    ) -> Result<Value, String> {
+        self.handle_inner(caller_plugin_id, action, params_json, rpc, embed_cfg)
+            .await
     }
 
     async fn handle_inner(
@@ -34,6 +129,8 @@ impl Handler {
         caller_plugin_id: &str,
         action: &str,
         params_json: &[u8],
+        rpc: Option<Rpc>,
+        embed_cfg: Option<&EmbedConfig>,
     ) -> Result<Value, String> {
         sanitize_caller_id(caller_plugin_id)?;
         let req = parse_request(action, params_json)?;
@@ -54,14 +151,13 @@ impl Handler {
                     .map(|v| serde_json::to_string(&v).unwrap_or_else(|_| "{}".to_string()))
                     .unwrap_or_else(|| "{}".to_string());
 
-                // Resolve dimension and vector
+                // Resolve dimension and vector — via ai if configured, else fake
                 let dim = self.resolve_collection_dim(&pool, &collection).await?;
                 let vec = if let Some(v) = vector {
                     validate_and_normalize_vector(v, dim)?
                 } else {
                     let d = dim.unwrap_or(self.default_dim);
-                    let emb = fake_embed(&text_val, d);
-                    emb
+                    embed_via_ai_or_fake(&text_val, Some(d), self.default_dim, rpc.as_ref(), embed_cfg).await?
                 };
 
                 // Check dim consistency if collection exists — handle race by INSERT OR IGNORE
@@ -139,7 +235,7 @@ impl Handler {
                     validate_and_normalize_vector(v, Some(dim))?
                 } else {
                     let t = text.unwrap_or_default();
-                    fake_embed(&t, dim)
+                    embed_via_ai_or_fake(&t, Some(dim), self.default_dim, rpc.as_ref(), embed_cfg).await?
                 };
 
                 // Load all vectors in collection

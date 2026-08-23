@@ -4,24 +4,98 @@ Embedding upsert + similarity search for Vynkor plugins, gated by `PERMISSION_ST
 One SQLite file per calling plugin — callers cannot see each other's collections.
 Brute-force cosine on L2-normalized vectors, per-collection dimension enforcement.
 
-`v0.1` is offline by default: deterministic fake embeddings (hash-based, L2-normalized) so the
-plugin has no native deps and works without network. For real vectors, plug in the `ai`
-plugin's `embedding` action — pass the returned `vector` to `vec_upsert`/`vec_query`:
+## Архитектура эмбеддинга: Ollama → ai → vector-db
 
-```json
-// 1) get embedding from ai (provider-agnostic, vault-first keys, same as chat_completion)
-{ "action": "embedding", "provider": "openai", "model": "text-embedding-3-small",
-  "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY", "input": "hello world" }
-// → { "embedding": [0.012, -0.03, ...], "dim": 1536, "model": "text-embedding-3-small" }
-// 2) store it
-{ "action": "vec_upsert", "collection": "mem", "id": "1", "text": "hello world", "vector": [0.012, ...] }
-// 3) query by vector (real) or by text (fake offline)
-{ "action": "vec_query", "collection": "mem", "vector": [0.012, ...], "top_k": 5 }
+**Модели ставят через Ollama, вызывают через `ai`, `vector-db` пересылает туда текст.**
+
+```
+operator:  ollama pull nomic-embed-text          # или mxbai-embed-large, all-minilm
+           ollama serve                           # OpenAI-совместимый /v1/embeddings на localhost:11434
+
+caller → vector-db vec_upsert {collection, id, text:"hello world"}
+         ↓ (если VECTOR_DB_EMBED_MODEL задан)
+         vector-db → ai embedding {provider:"openai", base_url:"http://localhost:11434/v1",
+                                    model:"nomic-embed-text", input:"hello world"}
+                   ↓ (ai резолвит ключ vault-first, шлёт через network http_request)
+                   Ollama → {embedding:[0.012,...], dim:768}
+         ← ai возвращает вектор
+         vector-db нормализует, сохраняет в SQLite, отвечает {ok, dim}
 ```
 
-`ai` supports any OpenAI-compatible embeddings endpoint (OpenAI, Voyage, Ollama `nomic-embed-text` at `http://localhost:11434/v1` with empty key). Version stays `0.1.0` — the model is pluggable via `ai`, not baked into `vector-db`.
+Почему так: `vector-db` — это хранилище, а не инференс. Модель живёт в Ollama, единый шлюз — `ai` (переиспользует `network` + `secrets` + allowlist `AI_PLUGIN_ALLOWED_KEY_ENVS`), а `vector-db` — тонкий прокси как `notes` → `database`. В чём проблема без этого — каждый плагин городил бы свой HTTP-клиент, дублировал SSRF-guard и vault-first логику, ломал T-19 (caller gated action должен иметь permission).
 
-`v0.2` will optionally add direct `VECTOR_DB_EMBED_*` envs for single-call `vec_upsert {text}` via `ai` internally.
+### Режимы v0.1 (версия 0.1.0 не меняется)
+
+| Режим | Как включить | Что происходит |
+|---|---|---|
+| **Офлайн fake** (дефолт) | не задавать `VECTOR_DB_EMBED_*` | `fake_embed(text, dim)` — детерминированный hash→L2-norm внутри vector-db, 0 зависимостей, работает без `ai`/`network`/`ollama` |
+| **Через ai (рекомендуется)** | задать `VECTOR_DB_EMBED_MODEL` | `vector-db` при `vec_upsert {text}` без `vector` сам зовёт `ai embedding`, получает реальный эмбеддинг, сохраняет. При `vec_query {text}` — так же. Прямая передача `vector` всегда в приоритете (BYO) и не трогает `ai` |
+| **BYO двухшаговый** | вызывать `ai embedding` явно | caller сам: `ai embedding` → `vec_upsert {vector}` — работает даже без настройки vector-db |
+
+Офлайн fake и реальный `ai` вектора несовместимы: `dim` коллекции фиксируется первым `vec_upsert` (384 у fake, 768/1536 у реальной модели) — смена модели → новая коллекция.
+
+## Ollama + ai: настройка за 3 команды
+
+```bash
+ollama pull nomic-embed-text   # 274M, 768 dim — дефолт для локального поиска
+# или ollama pull mxbai-embed-large  # 669M, 1024 dim, лучше качество
+ollama serve &
+```
+
+```yaml
+# config.yaml — kernel
+plugins:
+  - id: network
+    binary: /opt/plugins/network
+    sandbox: false
+    env:
+      - NETWORK_PLUGIN_ALLOWED_HOSTS=localhost,127.0.0.1  # иначе SSRF порежет loopback
+  - id: ai
+    binary: /opt/plugins/ai
+    sandbox: true
+    env:
+      - AI_PLUGIN_ALLOWED_KEY_ENVS=OLLAMA_API_KEY
+      - OLLAMA_API_KEY=  # пустой — Ollama без auth, но allowlist обязателен
+  - id: vector-db
+    binary: /opt/plugins/vector-db
+    sandbox: true
+    env:
+      - VECTOR_DB_DATA_DIR=/var/lib/vyn/vector-db
+      - VECTOR_DB_EMBED_MODEL=nomic-embed-text
+      - VECTOR_DB_EMBED_PROVIDER=openai
+      - VECTOR_DB_EMBED_BASE_URL=http://localhost:11434/v1
+      - VECTOR_DB_EMBED_API_KEY_ENV=OLLAMA_API_KEY
+      - VECTOR_DB_EMBED_TIMEOUT_MS=10000
+      - VECTOR_DB_DEFAULT_DIM=768  # должен совпадать с dim модели, иначе mismatch
+```
+
+Прямой вызов для проверки:
+```json
+// 1) напрямую через ai (проверить что Ollama отвечает)
+{ "action":"embedding","provider":"openai","base_url":"http://localhost:11434/v1",
+  "model":"nomic-embed-text","api_key_env":"OLLAMA_API_KEY","input":"hello world" }
+// → {"embedding":[0.012,...],"dim":768,"model":"nomic-embed-text","usage":{"input_tokens":2}}
+
+// 2) через vector-db (сам перешлёт в ai)
+{ "action":"vec_upsert","collection":"mem","id":"1","text":"hello world" }
+// vector-db → ai embedding → SQLite → {"ok":true,"id":"1","dim":768}
+
+{ "action":"vec_query","collection":"mem","text":"hello","top_k":5 }
+// → {"results":[{"id":"1","score":0.91,"text":"hello world","metadata":{}}]}
+```
+
+Двухшаговый BYO остаётся валидным всегда (передача `vector` в приоритете):
+```json
+{ "action":"embedding","provider":"openai","model":"text-embedding-3-small",
+  "base_url":"https://api.openai.com/v1","api_key_env":"OPENAI_API_KEY","input":"hello" }
+// → vec_upsert {collection, id, vector, text}
+```
+
+Cloud (без Ollama) — то же, но base_url/api_key_env указывают на OpenAI/Voyage:
+```json
+{ "action":"embedding","provider":"openai","model":"text-embedding-3-small",
+  "base_url":"https://api.openai.com/v1","api_key_env":"OPENAI_API_KEY","input":"hi" }
+```
 
 ## Actions
 

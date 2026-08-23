@@ -10,6 +10,12 @@ v1 supports two providers: `anthropic` (Claude Messages API) and `openai`
 (OpenAI-compatible chat completions — covers OpenAI, OpenRouter, and local
 Ollama, since all three speak the same wire shape).
 
+v0.3 adds `embedding` (OpenAI-compatible embeddings — `POST {base_url}/embeddings`):
+covers OpenAI `text-embedding-3-small/large`, Voyage `voyage-3-lite`, и локальные
+Ollama эмбеддинги (`nomic-embed-text` 768, `mxbai-embed-large` 1024, `all-minilm` 384).
+Используется `vector-db`: когда туда передают `text`, он пересылает его в `ai embedding`
+(модель берётся из Ollama), получает `embedding:[f32]` и сохраняет.
+
 **See [`USAGE.md`](./USAGE.md)** for the caller-facing guide: full
 `chat_completion` request/response reference, per-provider examples, every
 error message a caller can hit, and common patterns (multi-turn,
@@ -76,6 +82,39 @@ request fields, `api_key_env` not on the operator's allowlist or unset,
 malformed provider JSON, non-2xx HTTP status from the provider, or any
 error `network`'s `http_request` itself returns (SSRF block, timeout, DNS
 failure, connection refused).
+
+## Action: `embedding` (for vector-db)
+
+Request:
+```json
+{
+  "provider": "openai",
+  "base_url": "http://localhost:11434/v1",
+  "model": "nomic-embed-text",
+  "api_key_env": "OLLAMA_API_KEY",
+  "input": "hello world",
+  "timeout_ms": 10000
+}
+```
+- `provider` — only `"openai"` (covers OpenAI / Voyage / Ollama embeddings). `anthropic` → error.
+- `input` — required, `1..10000` chars, single text (batch в будущем).
+- `model` / `base_url` / `api_key_env` — как в `chat_completion`, резолвятся из `agent_id` или из БД `ai.db` если `model` там есть, иначе explicit.
+- `timeout_ms` — default/cap `30000`.
+
+Response:
+```json
+{ "embedding": [0.012, -0.03, ...], "dim": 768, "model": "nomic-embed-text", "usage": {"input_tokens":2,"output_tokens":0} }
+```
+
+Ошибки — те же что у `chat_completion`. См. `vector-db/README.md` — раздел «Архитектура эмбеддинга: Ollama → ai → vector-db».
+
+Пример Ollama:
+```bash
+ollama pull nomic-embed-text  # 768 dim
+ollama pull mxbai-embed-large  # 1024 dim
+# в ai config: base_url http://localhost:11434/v1, api_key_env OLLAMA_API_KEY="" (пустой, но в allowlist)
+# + network: NETWORK_PLUGIN_ALLOWED_HOSTS=localhost,127.0.0.1
+```
 
 ## Configuration
 
