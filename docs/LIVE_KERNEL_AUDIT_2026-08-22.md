@@ -51,7 +51,7 @@ vault-first key resolution errors without leaking anything.
 
 ## Defects
 
-### 1. `clipboard.clipboard_write` latency 35–60+ s
+### 1. `clipboard.clipboard_write` latency 35–60+ s — **fixed**
 
 Read path is fine (3–22 ms); host binaries work instantly from a shell
 (`wl-copy`/`wl-paste` under Hyprland). The plugin-side wait after spawning
@@ -60,7 +60,17 @@ Read path is fine (3–22 ms); host binaries work instantly from a shell
 across runs; latency varies (35.8 s once, >60 s another time).
 Tracked in `plugins/clipboard/ROADMAP.md`.
 
-### 2. tts/stt local sherpa path deadlocks before model load
+**Fix** (`fix/live-audit-defects`): `RealRunner::run` now wraps the whole
+spawn → stdin → wait sequence in a real `tokio::time::timeout` (previously
+the timeout was applied *after* the join, so it never fired), sets
+`kill_on_drop(true)`, and for writers (`wl-copy`/`xclip -in`) completes on
+direct-child exit instead of waiting for pipe EOF — the forked daemon
+inherits the pipe copies and EOF never arrives. After the fix `clipboard_write`
+completes in ~25 ms (live Wayland roundtrip verified) and `clipboard_read`
+stays at 2–4 ms. Four new `RealRunner` regression tests lock the behavior
+(`daemonized writer`, `timeout bound`, `stderr preserved`, `read stdout`).
+
+### 2. tts/stt local sherpa path deadlocks before model load — **fixed**
 
 `tts_voices`, `tts_synthesize` (sherpa/piper ru medium),
 `stt_models`, `stt_transcribe` (zipformer ru int8, bundled test wav)
@@ -70,12 +80,27 @@ deadline fires `ACTION_TIMEOUT` at ~200 s. Both plugins, 100% repro.
 Cloud providers untested (no keys). Tracked in
 `plugins/tts/ROADMAP.md` and `plugins/stt/ROADMAP.md`.
 
-### 3. ping-pong replies with `status=0`
+**Fix** (`fix/live-audit-defects`): all blocking sherpa calls
+(`voices`/`synthesize`/`synthesize_samples`/`transcribe`/`models`/`transcribe_pcm`)
+are now dispatched via `tokio::task::spawn_blocking` so they no longer block
+the async serve loop's worker thread. The underlying `OnceLock` engine init
+and the heavy `OfflineTts`/`OfflineRecognizer::create` ONNX loads run on the
+dedicated blocking pool. Isolated probes (including release builds) with the
+bundled `piper-ru_RU-denis-medium` and `zipformer-ru-int8` models now return
+`voices`/`models` instantly and synthesize/transcribe within seconds.
+
+### 3. ping-pong replies with `status=0` — **fixed**
 
 Payload is valid (`{"reply":"pong"}`) but `ActionStatus` arrives as 0 —
 consistent with pre-M9 enum numbering (`ACTION_OK` used to be 0; M9 made
 `*_UNKNOWN = 0`). Rebuild `ping-pong-rs` against current `veyron-wire`
 and assert the status in its tests.
+
+**Fix** (`fix/live-audit-defects`): source already used
+`ActionStatus::ActionOk` against `vynkor-wire` 0.0.2 (post-M9 `ACTION_OK=1`);
+the stale release binary is superseded at next `package.sh` run. Two new
+unit tests lock the contract (`pong_replies_action_ok_not_zero`,
+`unknown_action_replies_not_found`).
 
 ## Resource profile
 

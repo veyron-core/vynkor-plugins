@@ -37,7 +37,12 @@ pub async fn handle_tts_synthesize(
     let params = request::parse_request(params_json)?;
 
     let result = match params.provider {
-        ProviderKind::Sherpa => crate::provider::sherpa::synthesize(&params)?,
+        ProviderKind::Sherpa => {
+            let p = params.clone();
+            tokio::task::spawn_blocking(move || crate::provider::sherpa::synthesize(&p))
+                .await
+                .map_err(|e| format!("sherpa synthesize task failed: {e}"))??
+        }
         ProviderKind::OpenAi | ProviderKind::ElevenLabs => {
             synthesize_cloud(client, &params).await?
         }
@@ -53,7 +58,9 @@ pub async fn handle_tts_voices(
 ) -> Result<Vec<u8>, String> {
     let provider = request::parse_voices_request(params_json)?;
     let voices: Vec<VoiceInfo> = match provider {
-        ProviderKind::Sherpa => crate::provider::sherpa::voices()?,
+        ProviderKind::Sherpa => tokio::task::spawn_blocking(crate::provider::sherpa::voices)
+            .await
+            .map_err(|e| format!("sherpa voices task failed: {e}"))??,
         ProviderKind::OpenAi => OPENAI_VOICES
             .iter()
             .map(|v| VoiceInfo {
@@ -160,8 +167,14 @@ pub async fn handle_tts_speak(
 ) -> Result<Vec<u8>, String> {
     let params = request::parse_speak_request(params_json)?;
 
-    let (samples, model_rate) =
-        crate::provider::sherpa::synthesize_samples(&params.text, &params.voice, params.speed)?;
+    let text = params.text.clone();
+    let voice = params.voice.clone();
+    let speed = params.speed;
+    let (samples, model_rate) = tokio::task::spawn_blocking(move || {
+        crate::provider::sherpa::synthesize_samples(&text, &voice, speed)
+    })
+    .await
+    .map_err(|e| format!("sherpa synthesize task failed: {e}"))??;
     let sample_rate = if params.sample_rate_hz == 0 {
         model_rate
     } else {

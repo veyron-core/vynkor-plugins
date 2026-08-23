@@ -32,7 +32,12 @@ pub async fn handle_stt_transcribe(
     let params = request::parse_request(params_json)?;
 
     let result = match params.provider {
-        ProviderKind::Sherpa => crate::provider::sherpa::transcribe(&params)?,
+        ProviderKind::Sherpa => {
+            let p = params.clone();
+            tokio::task::spawn_blocking(move || crate::provider::sherpa::transcribe(&p))
+                .await
+                .map_err(|e| format!("sherpa transcribe task failed: {e}"))??
+        }
         ProviderKind::OpenAi => transcribe_cloud(client, &params).await?,
     };
 
@@ -46,7 +51,9 @@ pub async fn handle_stt_models(
 ) -> Result<Vec<u8>, String> {
     let provider = request::parse_models_request(params_json)?;
     let models: Vec<ModelInfo> = match provider {
-        ProviderKind::Sherpa => crate::provider::sherpa::models()?,
+        ProviderKind::Sherpa => tokio::task::spawn_blocking(crate::provider::sherpa::models)
+            .await
+            .map_err(|e| format!("sherpa models task failed: {e}"))??,
         ProviderKind::OpenAi => request::OPENAI_MODELS
             .iter()
             .map(|m| ModelInfo {
@@ -165,8 +172,13 @@ pub async fn handle_stt_listen_stop(
         ));
     }
     let pcm = stream.take_pcm();
-    let result =
-        crate::provider::sherpa::transcribe_pcm(&pcm, stream.rate_hz, stream.language.as_deref())?;
+    let rate = stream.rate_hz;
+    let lang = stream.language.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        crate::provider::sherpa::transcribe_pcm(&pcm, rate, lang.as_deref())
+    })
+    .await
+    .map_err(|e| format!("sherpa transcribe task failed: {e}"))??;
 
     let event = serde_json::json!({
         "stream_id": params.stream_id,
