@@ -86,6 +86,71 @@
       }
     },
     {
+      "name": "embedding",
+      "input": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["openai"],
+            "description": "Provider adapter. Currently only 'openai' (covers OpenAI, Voyage, Ollama, any OpenAI-compatible embeddings endpoint)."
+          },
+          "base_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Provider endpoint. Required when neither agent_id nor a stored model id is used."
+          },
+          "model": {
+            "type": "string",
+            "description": "Embedding model id — e.g. text-embedding-3-small, nomic-embed-text. May be a stored model id."
+          },
+          "api_key_env": {
+            "type": "string",
+            "description": "Name of env var holding the key, must be in AI_PLUGIN_ALLOWED_KEY_ENVS allowlist."
+          },
+          "input": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "description": "Text to embed (single input, 1..10000 chars)."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Optional agent profile whose model is used for embedding (resolves provider/base_url/model/api_key_env from DB)."
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30000,
+            "default": 30000
+          }
+        },
+        "required": ["input"],
+        "additionalProperties": true
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "embedding": {
+            "type": "array",
+            "items": { "type": "number" },
+            "description": "L2-normalizable embedding vector."
+          },
+          "dim": { "type": "integer", "description": "Dimension of the embedding." },
+          "model": { "type": "string" },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "input_tokens": { "type": "integer" },
+              "output_tokens": { "type": "integer" }
+            }
+          }
+        },
+        "required": ["embedding", "dim", "model", "usage"],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "list_models",
       "input": {
         "type": "object",

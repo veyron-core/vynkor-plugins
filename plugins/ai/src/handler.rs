@@ -10,9 +10,9 @@ use crate::config::DiscoverySource;
 use crate::db::{AiDb, UsageRow};
 use crate::discovery;
 use crate::provider::{
-    anthropic::AnthropicProvider, openai_compat::OpenAiCompatProvider, Provider,
+    anthropic::AnthropicProvider, openai_compat::OpenAiCompatProvider, EmbeddingProvider, Provider,
 };
-use crate::request::{self, ChatCompletionParams, Provider as RequestProvider};
+use crate::request::{self, ChatCompletionParams, EmbeddingParams, Provider as RequestProvider};
 
 /// `network`'s `http_request` response shape (see
 /// `plugins/network/src/handler.rs::HttpResponseJson`) — only the fields
@@ -103,6 +103,121 @@ pub async fn handle_chat_completion(
     let _ = db.touch_model(&model_id);
 
     serde_json::to_vec(&result).map_err(|e| format!("failed to encode response: {e}"))
+}
+
+pub async fn handle_embedding(
+    client: &mut VynkorClient,
+    params_json: &[u8],
+    db: &AiDb,
+) -> Result<Vec<u8>, String> {
+    let mut params = request::parse_embedding_request(params_json)?;
+    resolve_embedding_params(&mut params, db)?;
+
+    let allowed_key_envs = request::parse_allowed_key_envs(
+        &std::env::var(request::ALLOWED_KEY_ENVS_ENV).unwrap_or_default(),
+    );
+    if !request::is_allowed_key_env(&params.api_key_env, &allowed_key_envs) {
+        return Err(format!(
+            "api_key_env '{}' is not in the operator's {} allowlist",
+            params.api_key_env,
+            request::ALLOWED_KEY_ENVS_ENV
+        ));
+    }
+
+    let api_key = crate::key_resolve::resolve_api_key(client, &params.api_key_env).await?;
+
+    let provider: &dyn EmbeddingProvider = &OpenAiCompatProvider;
+
+    let http_req = provider.build_embedding_request(&params, &api_key);
+    let http_req_json = serde_json::to_vec(&http_req)
+        .map_err(|e| format!("failed to encode outbound http request: {e}"))?;
+
+    let action_resp = client
+        .send_action("http_request", &http_req_json, params.timeout_ms as u32)
+        .await
+        .map_err(|e| format!("network plugin call failed: {e}"))?;
+
+    if action_resp.status != vynkor_sdk::proto::ActionStatus::ActionOk as i32 {
+        return Err(format!("network plugin error: {}", action_resp.error));
+    }
+
+    let net_resp: NetworkHttpResponse = serde_json::from_slice(&action_resp.data_json)
+        .map_err(|e| format!("malformed network response: {e}"))?;
+
+    if !(200..300).contains(&net_resp.status) {
+        return Err(format!(
+            "provider returned HTTP {}: {}",
+            net_resp.status, net_resp.body
+        ));
+    }
+
+    let body_bytes: Vec<u8> = match net_resp.body_encoding.as_str() {
+        "base64" => {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD
+                .decode(&net_resp.body)
+                .map_err(|e| format!("malformed base64 response body: {e}"))?
+        }
+        _ => net_resp.body.into_bytes(),
+    };
+
+    let result = provider.parse_embedding_response(&body_bytes)?;
+
+    let model_id = params.model.clone();
+    if let Err(e) = db.record_usage(&UsageRow {
+        agent_id: params.agent_id.clone().unwrap_or_default(),
+        model_id: model_id.clone(),
+        input_tokens: result.usage.input_tokens,
+        output_tokens: result.usage.output_tokens,
+    }) {
+        eprintln!("[ai] failed to record usage: {e}");
+    }
+    let _ = db.touch_model(&model_id);
+
+    serde_json::to_vec(&result).map_err(|e| format!("failed to encode response: {e}"))
+}
+
+fn resolve_embedding_params(params: &mut EmbeddingParams, db: &AiDb) -> Result<(), String> {
+    if let Some(aid) = params.agent_id.clone() {
+        let agent = db
+            .get_agent(&aid)
+            .map_err(|e| format!("agent lookup failed: {e}"))?
+            .ok_or_else(|| format!("unknown agent: {aid}"))?;
+        let m = db
+            .get_model(&agent.model_id)
+            .map_err(|e| format!("model lookup failed: {e}"))?
+            .ok_or_else(|| format!("agent '{}' references unknown model '{}'", agent.id, agent.model_id))?;
+        params.model = m.id.clone();
+        params.base_url = m.base_url.clone();
+        params.api_key_env = m.api_key_env.clone();
+        params.provider = match m.provider.as_str() {
+            "openai" => RequestProvider::OpenAi,
+            other => return Err(format!("unsupported provider: {other}")),
+        };
+        return Ok(());
+    }
+    if !params.model.is_empty() {
+        if let Some(m) = db.get_model(&params.model).map_err(|e| format!("model lookup failed: {e}"))? {
+            params.provider = match m.provider.as_str() {
+                "openai" => RequestProvider::OpenAi,
+                other => return Err(format!("unsupported provider: {other}")),
+            };
+            params.base_url = m.base_url.clone();
+            params.api_key_env = m.api_key_env.clone();
+            params.model = m.id.clone();
+            return Ok(());
+        }
+    }
+    if params.model.is_empty() {
+        return Err("missing required field: model".to_string());
+    }
+    if params.base_url.is_empty() {
+        return Err("missing required field: base_url".to_string());
+    }
+    if params.api_key_env.is_empty() {
+        return Err("missing required field: api_key_env".to_string());
+    }
+    Ok(())
 }
 
 /// Resolve the effective model/endpoint for a request: an `agent_id` (or a
