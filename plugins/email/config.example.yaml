@@ -1,0 +1,51 @@
+# Example kernel config.yaml entry for the `email` plugin.
+# Copy this block into the top-level `plugins:` list of the kernel's
+# config.yaml, or into a `plugins.d/email.yaml` drop-in.
+#
+# `email` declares one kernel permission of its own — `secrets` — because it
+# resolves the SMTP password from the `secrets` plugin's vault first (its
+# `secret_get` action). It opens its own SMTP socket (lettre), so `sandbox`
+# must be false (real egress). `secrets` must also be registered and running
+# for vault-first credentials.
+
+plugins:
+  - id: email
+    binary: /opt/plugins/email      # path to the built `email` binary
+    restart: on-failure
+    max_restarts: 5
+    sandbox: false                  # email opens its own SMTP socket; needs real egress
+    env:
+      # Required: every env var name a caller is allowed to reference via
+      # credentials_env, comma-separated, exact match. Default-deny —
+      # omitting this rejects every email_send request. Without it a caller
+      # could name *any* env var this process has (not just the SMTP
+      # password) and hand its value to the SMTP client.
+      - EMAIL_PLUGIN_ALLOWED_CRED_ENVS=EMAIL_SMTP_PASS
+
+      # The SMTP password. Callers reference it by name via
+      # "credentials_env" in their email_send request; the password itself
+      # never leaves the host except on the SMTP connection.
+      #
+      # Resolution order is vault-first: at call time `email` asks the
+      # `secrets` plugin's vault for the password under the same name (its
+      # `secret_get` action), and only falls back to this env var when the
+      # vault has no non-empty value. The vault wins when both exist. To
+      # store the password in the vault instead of an env var, have the
+      # operator run (via the web UI or another plugin):
+      #
+      #   secret_set {"name":"EMAIL_SMTP_PASS","value":"..."}
+      #
+      # (the `secrets` plugin must be registered; `email` declares the
+      # `secrets` permission for this). Passwords stored only in the vault
+      # may be dropped from this `env:` list entirely — the allowlist above
+      # gates the handle either way.
+      - EMAIL_SMTP_PASS=<smtp password>
+
+      # Optional smoke-test mode: skip the real SMTP/IMAP and return a
+      # clearly-marked stub success. Remove (or set to anything but "true")
+      # for real sends. Either flag stubs email_list.
+      # - EMAIL_PLUGIN_SMTP_STUB=true
+      # - EMAIL_PLUGIN_IMAP_STUB=true
+    grace_seconds: 10
+    max_procs: 64
+    max_vmem_mb: 256
