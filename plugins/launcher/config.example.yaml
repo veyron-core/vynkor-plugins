@@ -1,0 +1,14 @@
+plugins:
+  - id: launcher
+    binary: /opt/plugins/launcher
+    sandbox: false
+    env:
+      - LAUNCHER_DESKTOP_DIRS=/usr/share/applications,~/.local/share/applications
+      - LAUNCHER_STEAM_ROOTS=~/.steam/steam,~/.local/share/Steam
+      - LAUNCHER_TIMEOUT_MS=10000
+      - LAUNCHER_CACHE_TTL_MS=60000
+      - LAUNCHER_TERMINAL=auto
+      - LAUNCHER_TMUX_SESSION=vynkor
+      # - LAUNCHER_ALLOWED_IDS=firefox,code,12345
+      # - LAUNCHER_STEAM_BINARY=steam
+      # - LAUNCHER_DESKTOP_LAUNCHER=auto
