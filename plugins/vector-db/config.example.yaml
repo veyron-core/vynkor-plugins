@@ -1,0 +1,12 @@
+# vector-db plugin config. Copy to config.yaml and set data_dir before running.
+data_dir: /var/lib/vyn/vector-db   # required, directory holding per-caller .db files
+pool_size: 4                          # connections per caller pool
+busy_timeout_ms: 5000                 # SQLite busy timeout
+max_response_bytes: 4194304           # 4 MiB, vec_query result size cap
+max_db_bytes: 268435456               # 256 MiB, hard per-caller disk quota (SQLITE_FULL past this); 0 disables
+default_dim: 384                      # default embedding dimension (BGE-small, MiniLM)
+# v0.1 uses deterministic fake embeddings (hash-based, L2-normalized) for offline use.
+# v0.2 will add: local ONNX (fastembed: bge-small-en-v1.5) + cloud embeddings via network+secrets
+#   VECTOR_DB_MODEL=bge-small-en-v1.5
+#   VECTOR_DB_MODEL_DIR=/opt/models/bge-small  # custom ONNX + tokenizer.json
+#   VECTOR_DB_ALLOWED_KEY_ENVS=OPENAI_API_KEY  # for cloud provider
