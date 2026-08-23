@@ -42,6 +42,25 @@ Examples show **params** and **result**.
 - **Embedding path:** if `vector` given → validated only; if `text` only and `VECTOR_DB_EMBED_MODEL` set → `vector-db` → `ai embedding {provider,model,base_url,api_key_env,input:text}` → Ollama/cloud → normalized vector; else → `fake_embed(text, dim)` (deterministic, hash-based). `vector` always wins.
 - First write creates collection with that `dim`; concurrent first-writes race-safe via `INSERT OR IGNORE`.
 
+### `vec_upsert_batch` — bulk insert/update (производительность)
+
+```jsonc
+// params — 1..1000 docs, каждый как vec_upsert без collection
+{"collection":"mem","docs":[
+  {"id":"1","text":"hello world","metadata":{"tag":"a"}},
+  {"id":"2","vector":[0.012,...],"text":"hello","metadata":{}},
+  {"id":"3","text":"another doc"}
+]}
+// result
+{"ok":true,"count":3,"dim":768}
+```
+
+- Одна SQLite транзакция (`BEGIN` → N `INSERT OR REPLACE` → `COMMIT`) — в 10x быстрее N одиночных `vec_upsert` (меньше `fsync`, один `max_page_count` чек).
+- Каждый `docs[i]` требует `text` или `vector` (как `vec_upsert`), `id` `1..256`, `text` `1..10000`, `vector` `1..4096`; `vector` побеждает `text`.
+- `dim` берётся из существующей коллекции или из первого документа; все доки в батче должны совпадать → иначе `docs[N] dimension mismatch`.
+- Эмбеддинг: `vector` → валидация, `text` → `ai` (если `VECTOR_DB_EMBED_*`) или `fake`, по одному `ai embedding` вызову на `text`-док (последовательно, с таймаутом `VECTOR_DB_EMBED_TIMEOUT_MS`).
+- Публикует один `changed` event на весь батч (best-effort).
+
 ### `vec_query` — similarity search
 
 ```jsonc
@@ -181,9 +200,10 @@ All failures are `ACTION_ERROR` with these messages:
 - `vec_upsert requires at least one of text or vector` / `vec_query requires at least one of text or vector`
 - `params.text too long (max 10000)` / `params.top_k must be 1..100` / `params.vector must be non-empty` / `vector dim too large: N > 4096`
 - `vector must be non-empty` / `vector dim too large` / `vector[N] is not finite` / `vector has zero norm`
-- `dimension mismatch: collection 'X' dim D, got N` / `dimension mismatch: expected D, got N`
+- `dimension mismatch: collection 'X' dim D, got N` / `dimension mismatch: expected D, got N` / `docs[N] dimension mismatch`
 - `query result exceeds max_response_bytes (> M)` / `vector too large`
-- `unknown action: X` / `invalid params for vec_* ...` / `ai.embedding failed: ...` (wrapped, key never leaked)
+- `params.docs must be non-empty` / `params.docs too large (max 1000)` / `docs[N] requires at least one of text or vector`
+- `unknown action: X` / `invalid params for vec_* ...` / `ai embedding failed: ...` (wrapped, key never leaked) / `ai embedding unavailable (...) and fallback=error`
 - `missing caller_plugin_id` / `invalid caller_plugin_id`
 
 Missing collection in `vec_query`/`vec_stats` is not an error — returns `{"results":[]}` / `{"count":0,"dim":0}`. `vec_get` missing → `{"found":false}`. `vec_delete` missing → `{"deleted":false}`.
@@ -200,11 +220,12 @@ See `config.example.yaml`. All env vars are read at startup from kernel `config.
 | `VECTOR_DB_MAX_RESPONSE_BYTES` | `4194304` | query result cap |
 | `VECTOR_DB_MAX_DB_BYTES` | `268435456` | `PRAGMA max_page_count` quota, `0` disables |
 | `VECTOR_DB_DEFAULT_DIM` | `384` | dim for fake embeddings |
-| `VECTOR_DB_EMBED_MODEL` | — | if set, enables forwarding `text` → `ai embedding`; e.g. `nomic-embed-text` |
+| `VECTOR_DB_EMBED_MODEL` | — | if set, enables forwarding `text` → `ai embedding`; e.g. `nomic-embed-text` (768), `all-minilm:33m` (384) |
 | `VECTOR_DB_EMBED_PROVIDER` | `openai` | `openai` only (covers Ollama/Voyage) |
-| `VECTOR_DB_EMBED_BASE_URL` | — | e.g. `http://localhost:11434/v1` |
-| `VECTOR_DB_EMBED_API_KEY_ENV` | — | must be in `AI_PLUGIN_ALLOWED_KEY_ENVS` |
+| `VECTOR_DB_EMBED_BASE_URL` | — | e.g. `http://localhost:11434/v1` for Ollama |
+| `VECTOR_DB_EMBED_API_KEY_ENV` | — | must be in `AI_PLUGIN_ALLOWED_KEY_ENVS`; Ollama: `OLLAMA_API_KEY=""` |
 | `VECTOR_DB_EMBED_TIMEOUT_MS` | `10000` | ai call timeout |
+| `VECTOR_DB_EMBED_FALLBACK` | `error` | `error` → fail request on ai error (prod, не маскирует Ollama down); `fake` → silent fallback в `fake_embed` (тесты/офлайн) |
 
 ## Testing
 

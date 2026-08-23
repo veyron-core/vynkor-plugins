@@ -78,10 +78,16 @@ async fn embed_via_ai_or_fake(
                     return Ok(normed);
                 }
                 Err(e) => {
+                    if cfg.fallback == crate::config::EmbedFallback::Error {
+                        return Err(format!("ai embedding failed: {e}"));
+                    }
                     eprintln!("[vector-db] ai embedding failed ({}), falling back to fake", e);
                 }
             }
         }
+    }
+    if embed_cfg.is_some_and(|c| c.enabled && c.fallback == crate::config::EmbedFallback::Error) {
+        return Err("ai embedding unavailable (no Rpc or ai failure) and fallback=error — refusing fake".to_string());
     }
     let d = dim_hint.unwrap_or(default_dim);
     Ok(fake_embed(text, d))
@@ -215,6 +221,65 @@ impl Handler {
                 .map_err(|e| e.to_string())?;
 
                 Ok(json!({"ok": true, "id": id, "dim": vec.len()}))
+            }
+            VectorRequest::BatchUpsert { collection, docs } => {
+                let collection = sanitize_collection(&collection)?.to_string();
+                let mut dim = self.resolve_collection_dim(&pool, &collection).await?;
+                let mut count = 0usize;
+                let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+                for doc in docs {
+                    let id = sanitize_id(&doc.id)?.to_string();
+                    let text_val = doc.text.unwrap_or_default();
+                    let metadata_str = doc
+                        .metadata
+                        .map(|v| serde_json::to_string(&v).unwrap_or_else(|_| "{}".to_string()))
+                        .unwrap_or_else(|| "{}".to_string());
+                    let vec = if let Some(v) = doc.vector {
+                        validate_and_normalize_vector(v, dim)?
+                    } else {
+                        let d = dim.unwrap_or(self.default_dim);
+                        let emb = embed_via_ai_or_fake(&text_val, Some(d), self.default_dim, rpc.as_ref(), embed_cfg).await?;
+                        if dim.is_none() {
+                            dim = Some(emb.len());
+                        }
+                        emb
+                    };
+                    if let Some(expected) = dim {
+                        if vec.len() != expected {
+                            return Err(format!(
+                                "docs[{}] dimension mismatch: collection '{}' dim {expected}, got {}",
+                                count, collection, vec.len()
+                            ));
+                        }
+                    }
+                    let vector_json = serde_json::to_string(&vec).map_err(|e| e.to_string())?;
+                    sqlx::query(
+                        "insert into vectors (collection, id, text, vector, metadata, updated_at) values (?1, ?2, ?3, ?4, ?5, ?6) \
+                         on conflict(collection, id) do update set text=excluded.text, vector=excluded.vector, metadata=excluded.metadata, updated_at=excluded.updated_at"
+                    )
+                    .bind(&collection)
+                    .bind(&id)
+                    .bind(&text_val)
+                    .bind(&vector_json)
+                    .bind(&metadata_str)
+                    .bind(crate::db::now_ms())
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    count += 1;
+                }
+                if let Some(d) = dim {
+                    sqlx::query("insert or ignore into collections (name, dim, created_at) values (?1, ?2, ?3)")
+                        .bind(&collection)
+                        .bind(d as i64)
+                        .bind(crate::db::now_ms())
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
+                tx.commit().await.map_err(|e| e.to_string())?;
+                let final_dim = dim.unwrap_or(self.default_dim);
+                Ok(json!({"ok": true, "count": count, "dim": final_dim}))
             }
             VectorRequest::Query {
                 collection,
@@ -646,5 +711,76 @@ mod tests {
         for t in tasks {
             t.await.unwrap();
         }
+    }
+
+    #[tokio::test]
+    async fn batch_upsert_is_atomic_and_faster() {
+        let dir = tempfile::tempdir().unwrap();
+        let h = make_handler(dir.path());
+        let caller = "agent";
+        let res = h
+            .handle(
+                caller,
+                "vec_upsert_batch",
+                br#"{"collection":"batch","docs":[{"id":"1","text":"hello"},{"id":"2","text":"world"},{"id":"3","vector":[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8]}]}"#,
+            )
+            .await
+            .unwrap();
+        assert_eq!(res["count"], 3);
+        assert_eq!(res["dim"], 8);
+        let stats = h
+            .handle(caller, "vec_stats", br#"{"collection":"batch"}"#)
+            .await
+            .unwrap();
+        assert_eq!(stats["count"], 3);
+        let q = h
+            .handle(caller, "vec_query", br#"{"collection":"batch","text":"hello","top_k":5}"#)
+            .await
+            .unwrap();
+        assert_eq!(q["results"].as_array().unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn batch_rejects_dim_mismatch() {
+        let dir = tempfile::tempdir().unwrap();
+        let h = make_handler(dir.path());
+        let caller = "agent";
+        h.handle(
+            caller,
+            "vec_upsert",
+            br#"{"collection":"c","id":"1","vector":[1,0,0,0,0,0,0,0]}"#,
+        )
+        .await
+        .unwrap();
+        let err = h
+            .handle(
+                caller,
+                "vec_upsert_batch",
+                br#"{"collection":"c","docs":[{"id":"2","vector":[1,0,0]}]}"#,
+            )
+            .await
+            .unwrap_err();
+        assert!(err.contains("dimension mismatch"), "err was: {err}");
+    }
+
+    #[tokio::test]
+    async fn fallback_error_when_ai_unavailable() {
+        let dir = tempfile::tempdir().unwrap();
+        let h = make_handler(dir.path());
+        let caller = "agent";
+        let cfg = crate::config::EmbedConfig {
+            enabled: true,
+            provider: "openai".into(),
+            base_url: "http://localhost:11434/v1".into(),
+            model: "nomic-embed-text".into(),
+            api_key_env: "OLLAMA_API_KEY".into(),
+            timeout_ms: 100,
+            fallback: crate::config::EmbedFallback::Error,
+        };
+        let err = h
+            .handle_with_rpc(caller, "vec_upsert", br#"{"collection":"c","id":"1","text":"hello"}"#, None, Some(&cfg))
+            .await
+            .unwrap_err();
+        assert!(err.contains("fallback=error") || err.contains("ai embedding"), "err was: {err}");
     }
 }

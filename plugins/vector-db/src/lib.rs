@@ -27,6 +27,7 @@ impl ConcurrentHandler for Handler {
             ],
             actions: vec![
                 "vec_upsert".into(),
+                "vec_upsert_batch".into(),
                 "vec_query".into(),
                 "vec_get".into(),
                 "vec_delete".into(),
@@ -45,8 +46,8 @@ impl ConcurrentHandler for Handler {
         {
             Ok(result) => {
                 envelopes.push(response_envelope(req.action_id, Ok(serde_json::to_vec(&result).unwrap())));
-                // best-effort changed event for upsert/delete
-                if req.action == "vec_upsert" || req.action == "vec_delete" {
+                // best-effort changed event for upsert/batch/delete
+                if req.action == "vec_upsert" || req.action == "vec_upsert_batch" || req.action == "vec_delete" {
                     let payload = serde_json::json!({
                         "caller": req.caller_plugin_id,
                         "action": req.action,

@@ -34,6 +34,21 @@ caller → vector-db vec_upsert {collection, id, text:"hello world"}
 
 Офлайн fake и реальный `ai` вектора несовместимы: `dim` коллекции фиксируется первым `vec_upsert` (384 у fake, 768/1536 у реальной модели) — смена модели → новая коллекция.
 
+### Зачем вообще fake? (и когда он не нужен)
+
+`fake` — не продакшен, а **заглушка для тестов и офлайна.** Без него `cargo test` требовал бы живую Ollama + `ai` + `network` + ключи, падал бы в CI и без сети. Fake даёт:
+
+* детерминированный `vec_upsert {text}` → `vec_query {text}` с косинусом `0.9+` для одинакового текста (`cargo test` 26 тестов, 0 сети);
+* работу `vector-db` без `ai`/`ollama` (демо, `notes` без сети);
+* `dim` по умолчанию `384` как у `all-minilm`/`bge-small` для совместимости.
+
+В проде с Ollama **fake не используется**: если `VECTOR_DB_EMBED_MODEL` задан, `vector-db` шлёт `ai embedding`; при ошибке `ai` (Ollama down, 5xx, timeout) поведением управляет `VECTOR_DB_EMBED_FALLBACK`:
+
+* `fallback=error` (дефолт когда `EMBED_MODEL` задан) — возвращает `ACTION_ERROR: ai embedding failed: ...`, **не** падает в fake, чтобы скрытый деград не портил поиск;
+* `fallback=fake` — молча падает в `fake_embed` (для демо/офлайн с `ai` опционально).
+
+Т.е. fake остаётся для `cargo test` и офлайн-режима, в проде с `ollama pull nomic-embed-text` он не мешает — `dim` берётся из реального эмбеддинга (768), и коллекции с `fake` (384) туда не попадут.
+
 ## Ollama + ai: настройка за 3 команды
 
 ```bash

@@ -10,6 +10,10 @@ pub enum VectorRequest {
         vector: Option<Vec<f32>>,
         metadata: Option<Value>,
     },
+    BatchUpsert {
+        collection: String,
+        docs: Vec<BatchDoc>,
+    },
     Query {
         collection: String,
         text: Option<String>,
@@ -32,6 +36,14 @@ pub enum VectorRequest {
     Stats {
         collection: String,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct BatchDoc {
+    pub id: String,
+    pub text: Option<String>,
+    pub vector: Option<Vec<f32>>,
+    pub metadata: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -81,6 +93,23 @@ struct DeleteParams {
 struct ListParams {
     #[serde(default)]
     prefix: String,
+}
+
+#[derive(Deserialize)]
+struct BatchDocRaw {
+    id: String,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    vector: Option<Vec<f32>>,
+    #[serde(default)]
+    metadata: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct BatchUpsertParams {
+    collection: String,
+    docs: Vec<BatchDocRaw>,
 }
 
 #[derive(Deserialize)]
@@ -192,6 +221,52 @@ pub fn parse_request(action: &str, params_json: &[u8]) -> Result<VectorRequest, 
             Ok(VectorRequest::Stats {
                 collection: require_nonempty(p.collection, "collection")?,
             })
+        }
+        "vec_upsert_batch" => {
+            let p: BatchUpsertParams = serde_json::from_slice(params_json)
+                .map_err(|e| format!("invalid params for vec_upsert_batch: {e}"))?;
+            let collection = require_nonempty(p.collection, "collection")?;
+            if collection.len() > 128 {
+                return Err("params.collection too long (max 128)".to_string());
+            }
+            if p.docs.is_empty() {
+                return Err("params.docs must be non-empty".to_string());
+            }
+            if p.docs.len() > 1000 {
+                return Err("params.docs too large (max 1000)".to_string());
+            }
+            let mut docs = Vec::with_capacity(p.docs.len());
+            for raw in p.docs {
+                let id = require_nonempty(raw.id, "docs[].id")?;
+                if id.len() > 256 {
+                    return Err("params.docs[].id too long (max 256)".to_string());
+                }
+                let has_text = raw.text.as_ref().map_or(false, |t| !t.trim().is_empty());
+                let has_vector = raw.vector.as_ref().map_or(false, |v| !v.is_empty());
+                if !has_text && !has_vector {
+                    return Err(format!("docs[{}] requires at least one of text or vector", docs.len()));
+                }
+                if let Some(t) = &raw.text {
+                    if t.len() > 10000 {
+                        return Err("params.docs[].text too long (max 10000)".to_string());
+                    }
+                }
+                if let Some(v) = &raw.vector {
+                    if v.is_empty() {
+                        return Err("params.docs[].vector must be non-empty".to_string());
+                    }
+                    if v.len() > 4096 {
+                        return Err(format!("params.docs[].vector dim too large: {} > 4096", v.len()));
+                    }
+                }
+                docs.push(BatchDoc {
+                    id,
+                    text: raw.text.filter(|t| !t.trim().is_empty()),
+                    vector: raw.vector,
+                    metadata: raw.metadata,
+                });
+            }
+            Ok(VectorRequest::BatchUpsert { collection, docs })
         }
         other => Err(format!("unknown action: {other}")),
     }

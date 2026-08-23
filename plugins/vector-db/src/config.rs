@@ -2,6 +2,25 @@ use std::path::PathBuf;
 
 use crate::db::DbConfig;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EmbedFallback {
+    Fake,
+    Error,
+}
+
+impl EmbedFallback {
+    fn from_env() -> Self {
+        match std::env::var("VECTOR_DB_EMBED_FALLBACK")
+            .unwrap_or_else(|_| "error".to_string())
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "fake" => Self::Fake,
+            _ => Self::Error,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EmbedConfig {
     pub enabled: bool,
@@ -10,6 +29,7 @@ pub struct EmbedConfig {
     pub model: String,
     pub api_key_env: String,
     pub timeout_ms: u32,
+    pub fallback: EmbedFallback,
 }
 
 impl EmbedConfig {
@@ -23,6 +43,7 @@ impl EmbedConfig {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(10000);
+        let fallback = EmbedFallback::from_env();
         Self {
             enabled,
             provider,
@@ -30,6 +51,7 @@ impl EmbedConfig {
             model,
             api_key_env,
             timeout_ms,
+            fallback,
         }
     }
 }

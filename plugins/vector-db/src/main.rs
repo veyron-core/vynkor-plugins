@@ -22,6 +22,7 @@ fn manifest() -> PluginManifest {
         ],
         actions: vec![
             "vec_upsert".into(),
+            "vec_upsert_batch".into(),
             "vec_query".into(),
             "vec_get".into(),
             "vec_delete".into(),
@@ -128,7 +129,7 @@ async fn serve(mut client: VynkorClient, config: Config) -> Result<(), VynkorErr
                                 Ok(val) => {
                                     let data = serde_json::to_vec(&val).unwrap_or_default();
                                     let _ = out.send(action_response(action_id.clone(), ActionStatus::ActionOk, data, String::new())).await;
-                                    if action == "vec_upsert" || action == "vec_delete" {
+                                    if action == "vec_upsert" || action == "vec_upsert_batch" || action == "vec_delete" {
                                         let payload = serde_json::json!({"caller": caller, "action": action});
                                         let _ = out.send(event_envelope("changed", &payload)).await;
                                     }
