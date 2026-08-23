@@ -8,15 +8,9 @@ sockets), operator configuration, and the security model behind
 
 ## The model in one minute
 
-- **One action, `chat_completion`.** You send a list of messages and a model
-  name; you get back a single completion. No conversation state is held —
-  multi-turn history is your responsibility, pass the whole `messages` array
-  each call.
-- **Two providers.** `anthropic` (Claude Messages API) and `openai`
-  (OpenAI-compatible chat completions — covers OpenAI, OpenRouter, and local
-  Ollama, since all three speak the same wire shape). Both normalize to the
-  **same** response shape, so you can switch providers without changing your
-  response-parsing code.
+- **Two actions, `chat_completion` + `embedding`.** `chat_completion`: messages → completion (no state). `embedding`: single text → vector (for `vector-db`). Both provider-agnostic and vault-first.
+- **Two providers for chat, one for embeddings.** Chat: `anthropic` (Claude Messages API) and `openai` (OpenAI-compatible — covers OpenAI, OpenRouter, Ollama). Embeddings: `openai` only — covers OpenAI `text-embedding-3-*`, Voyage, and local Ollama (`nomic-embed-text` 768, `mxbai-embed-large` 1024, `all-minilm` 384) via the same `/v1/embeddings` shape. `anthropic` → `anthropic does not support embeddings`.
+- **Vector-db integration.** `vector-db` `vec_upsert {text}` / `vec_query {text}` forwards to `ai embedding` when `VECTOR_DB_EMBED_*` is set (Ollama at `http://localhost:11434/v1`). See `plugins/vector-db/README.md` “Архитектура эмбеддинга: Ollama → ai → vector-db” and `plugins/vector-db/USAGE.md`.
 - **You never send the API key.** You send the *name* of an env var
   (`api_key_env`); the `ai` process reads it at call time. The operator must
   have allowlisted that name (`AI_PLUGIN_ALLOWED_KEY_ENVS`) and set the value.
@@ -75,6 +69,58 @@ Normalized across both providers:
   "stop_reason": "end_turn",
   "usage": {"input_tokens": 17, "output_tokens": 42}
 }
+```
+
+## `embedding` — request (for vector-db, Ollama)
+
+```jsonc
+// params — via ai, model lives in Ollama
+{
+  "provider": "openai",                         // only "openai" for embeddings
+  "base_url": "http://localhost:11434/v1",      // Ollama OpenAI-compat, or https://api.openai.com/v1
+  "model": "nomic-embed-text",                  // 768 dim — or mxbai-embed-large 1024, all-minilm 384, text-embedding-3-small 1536
+  "api_key_env": "OLLAMA_API_KEY",              // must be in AI_PLUGIN_ALLOWED_KEY_ENVS; Ollama: "" (empty, still allowlisted)
+  "input": "hello world",                       // required, 1..10000 chars, single text (batch later)
+  "timeout_ms": 10000                           // optional, default/cap 30000
+}
+// also supports agent_id / stored model_id (like chat_completion):
+{"agent_id":"embed","input":"hello world"}
+{"model":"nomic-embed-text","input":"hello world"}  // resolves base_url/api_key_env from ai.db if model there
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `provider` | yes (unless `agent_id`) | `"openai"` only for embeddings. `anthropic` → error. |
+| `base_url` | openai | No default; `http://localhost:11434/v1` for Ollama. Trailing `/` trimmed. |
+| `model` | yes (unless `agent_id`) | Embedding model id. With Ollama: `nomic-embed-text` (default), `mxbai-embed-large`, `all-minilm`. With OpenAI: `text-embedding-3-small` (1536), `text-embedding-3-large` (3072). |
+| `api_key_env` | yes (unless `agent_id`) | Env var name, vault-first, must be in `AI_PLUGIN_ALLOWED_KEY_ENVS`. Ollama: pick `OLLAMA_API_KEY=""` (empty) — still add to allowlist. |
+| `input` | yes | Single text `1..10000` chars. Empty → `input must not be empty`. |
+| `timeout_ms` | no | Default `30000`, cap `30000`. |
+
+## `embedding` — response
+
+Normalized (OpenAI shape):
+
+```jsonc
+// result
+{
+  "embedding": [0.012, -0.03, 0.007, ...],  // length = dim, L2-normalizable, finite
+  "dim": 768,
+  "model": "nomic-embed-text",
+  "usage": {"input_tokens":2,"output_tokens":0}
+}
+```
+
+- `embedding` is the raw provider vector (not yet normalized — `vector-db` normalizes on write).
+- `dim` is `embedding.length` (768/1024/384/1536 depending on model).
+- `vector-db` forwards `text` → `ai embedding` when `VECTOR_DB_EMBED_MODEL` is set (see `vector-db/README.md`). Direct `vector` in `vec_upsert` always bypasses `ai`.
+
+Ollama setup (once):
+```bash
+ollama pull nomic-embed-text  # 274M, 768
+ollama pull mxbai-embed-large # 669M, 1024
+ollama serve &
+# network must allow loopback: NETWORK_PLUGIN_ALLOWED_HOSTS=localhost,127.0.0.1
 ```
 
 - `content` — the completion text. For `anthropic` it's the first content
@@ -155,7 +201,10 @@ resolved API key value never appears in any of them.
 | `model must not be empty` | `model` present but empty string |
 | `api_key_env must not be empty` | `api_key_env` present but empty string |
 | `messages must not be empty` | `messages` is `[]` |
-| `unknown action: <name>` | action wasn't `chat_completion` |
+| `input must not be empty` | `embedding` `input` is `""` / whitespace |
+| `input too long (max 10000)` | `embedding` `input` > 10000 chars |
+| `anthropic does not support embeddings` | `embedding` with `provider: anthropic` |
+| `unknown action: <name>` | action wasn't `chat_completion` or `embedding` |
 
 **Rejected by policy / key resolution:**
 
