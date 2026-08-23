@@ -40,6 +40,7 @@ fn manifest() -> PluginManifest {
         permissions: vec!["PERMISSION_NETWORK".into(), "PERMISSION_SECRETS".into()],
         actions: vec![
             "chat_completion".to_string(),
+            "embedding".to_string(),
             "list_models".to_string(),
             "list_agents".to_string(),
             "refresh_models".to_string(),
@@ -64,6 +65,7 @@ async fn handle_action_request(
 ) -> Envelope {
     let outcome = match req.action.as_str() {
         "chat_completion" => handler::handle_chat_completion(client, &req.params_json, db).await,
+        "embedding" => handler::handle_embedding(client, &req.params_json, db).await,
         "list_models" => handler::handle_list_models(db),
         "list_agents" => handler::handle_list_agents(db),
         "usage_stats" => handler::handle_usage_stats(db),

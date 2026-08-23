@@ -47,3 +47,20 @@ pub trait Provider {
     /// `crate::handler` before this is reached.
     fn parse_response(&self, body: &[u8]) -> Result<ChatResult, String>;
 }
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct EmbeddingResult {
+    pub embedding: Vec<f32>,
+    pub dim: usize,
+    pub model: String,
+    pub usage: Usage,
+}
+
+pub trait EmbeddingProvider {
+    fn build_embedding_request(
+        &self,
+        params: &crate::request::EmbeddingParams,
+        api_key: &str,
+    ) -> HttpRequestJson;
+    fn parse_embedding_response(&self, body: &[u8]) -> Result<EmbeddingResult, String>;
+}

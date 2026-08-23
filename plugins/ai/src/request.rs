@@ -151,6 +151,73 @@ pub fn parse_request(params_json: &[u8]) -> Result<ChatCompletionParams, String>
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmbeddingParams {
+    pub provider: Provider,
+    pub base_url: String,
+    pub model: String,
+    pub api_key_env: String,
+    pub input: String,
+    pub timeout_ms: u64,
+    pub agent_id: Option<String>,
+}
+
+pub fn parse_embedding_request(params_json: &[u8]) -> Result<EmbeddingParams, String> {
+    #[derive(serde::Deserialize)]
+    struct Raw {
+        provider: Option<String>,
+        base_url: Option<String>,
+        model: Option<String>,
+        api_key_env: Option<String>,
+        input: Option<String>,
+        timeout_ms: Option<u64>,
+        agent_id: Option<String>,
+    }
+    let raw: Raw =
+        serde_json::from_slice(params_json).map_err(|e| format!("invalid JSON: {e}"))?;
+    let agent_id = raw.agent_id.filter(|s| !s.is_empty());
+    let provider = match raw.provider {
+        Some(p) => match p.as_str() {
+            "openai" => Provider::OpenAi,
+            "anthropic" => return Err("anthropic does not support embeddings".to_string()),
+            other => return Err(format!("unsupported provider: {other}")),
+        },
+        None if agent_id.is_some() => Provider::OpenAi,
+        None => return Err("missing required field: provider".to_string()),
+    };
+    let base_url = match (raw.base_url, provider) {
+        (Some(u), _) if !u.is_empty() => u,
+        (_, _) if agent_id.is_some() => String::new(),
+        (_, Provider::OpenAi) => return Err("missing required field: base_url".to_string()),
+        (_, _) => return Err("missing required field: base_url".to_string()),
+    };
+    let model = raw.model.unwrap_or_default();
+    if model.is_empty() && agent_id.is_none() {
+        return Err("missing required field: model".to_string());
+    }
+    let api_key_env = raw.api_key_env.unwrap_or_default();
+    if api_key_env.is_empty() && agent_id.is_none() {
+        return Err("missing required field: api_key_env".to_string());
+    }
+    let input = raw.input.ok_or("missing required field: input")?;
+    if input.trim().is_empty() {
+        return Err("input must not be empty".to_string());
+    }
+    if input.len() > 10000 {
+        return Err("input too long (max 10000)".to_string());
+    }
+    let timeout_ms = raw.timeout_ms.unwrap_or(MAX_TIMEOUT_MS).min(MAX_TIMEOUT_MS);
+    Ok(EmbeddingParams {
+        provider,
+        base_url,
+        model,
+        api_key_env,
+        input,
+        timeout_ms,
+        agent_id,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

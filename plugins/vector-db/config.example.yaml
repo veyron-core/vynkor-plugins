@@ -1,0 +1,30 @@
+# vector-db plugin config. Copy to config.yaml and set data_dir before running.
+data_dir: /var/lib/vyn/vector-db   # required, directory holding per-caller .db files
+pool_size: 4                          # connections per caller pool
+busy_timeout_ms: 5000                 # SQLite busy timeout
+max_response_bytes: 4194304           # 4 MiB, vec_query result size cap
+max_db_bytes: 268435456               # 256 MiB, hard per-caller disk quota (SQLITE_FULL past this); 0 disables
+default_dim: 384                      # default dim for fake offline (совпадает с all-minilm/bge-small)
+# --- Embedding: Ollama → ai → vector-db (рекомендуется) ---
+# Модели ставят через Ollama, вызывает ai, vector-db пересылает туда text:
+#   ollama pull nomic-embed-text   # 768 dim, 274M  (или mxbai-embed-large 1024, all-minilm:33m 384)
+#   ollama serve
+# Тогда vector-db при vec_upsert {text} без vector сам зовёт ai embedding.
+# Если VECTOR_DB_EMBED_MODEL не задан — офлайн fake (hash→L2, 0 deps, для cargo test).
+embed_model: nomic-embed-text         # если задан — включает пересылку в ai; пусто = fake
+embed_provider: openai                # только openai (покрывает Ollama/Voyage/OpenAI)
+embed_base_url: http://localhost:11434/v1  # Ollama OpenAI-compat; для cloud: https://api.openai.com/v1
+embed_api_key_env: OLLAMA_API_KEY     # должен быть в AI_PLUGIN_ALLOWED_KEY_ENVS; для Ollama "" (пустой)
+embed_timeout_ms: 10000               # таймаут ai.embedding
+embed_fallback: error                 # error (дефолт когда embed_model задан) → не падать в fake, вернуть ACTION_ERROR; fake → молча fallback в fake для демо
+# --- Производительность ---
+# vec_upsert_batch {collection, docs:[{id,text,vector,metadata},... up to 1000]} — одна транзакция, в 10x быстрее N одиночных vec_upsert
+# brute-force cosine внутри SQLite, хватает до 100k векторов; HNSW (sqlite-vec/usearch) — в v0.3
+# --- Примеры ---
+# Через ai (Ollama):
+#   ai embedding {provider:"openai", model:"nomic-embed-text", base_url:"http://localhost:11434/v1", api_key_env:"OLLAMA_API_KEY", input:"hello"}
+#     → {embedding:[...], dim:768}
+#   vec_upsert {collection:"mem", id:"1", vector:[...], text:"hello"}  # BYO
+#   vec_upsert {collection:"mem", id:"1", text:"hello"}                # или vector-db сам перешлёт в ai
+# Cloud:
+#   ai embedding {provider:"openai", model:"text-embedding-3-small", base_url:"https://api.openai.com/v1", api_key_env:"OPENAI_API_KEY", input:"hi"}

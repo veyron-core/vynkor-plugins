@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 
-use super::{ChatResult, HttpRequestJson, Provider, Usage};
-use crate::request::ChatCompletionParams;
+use super::{ChatResult, EmbeddingResult, EmbeddingProvider, HttpRequestJson, Provider, Usage};
+use crate::request::{ChatCompletionParams, EmbeddingParams};
 
 pub struct OpenAiCompatProvider;
 
@@ -87,6 +87,72 @@ impl Provider for OpenAiCompatProvider {
             usage: Usage {
                 input_tokens: resp.usage.prompt_tokens,
                 output_tokens: resp.usage.completion_tokens,
+            },
+        })
+    }
+}
+
+impl EmbeddingProvider for OpenAiCompatProvider {
+    fn build_embedding_request(
+        &self,
+        params: &EmbeddingParams,
+        api_key: &str,
+    ) -> HttpRequestJson {
+        let url = format!("{}/embeddings", params.base_url.trim_end_matches('/'));
+        let body = serde_json::json!({
+            "model": params.model,
+            "input": params.input,
+        })
+        .to_string();
+        let mut headers = HashMap::new();
+        if !api_key.is_empty() {
+            headers.insert("Authorization".to_string(), format!("Bearer {api_key}"));
+        }
+        headers.insert("content-type".to_string(), "application/json".to_string());
+        HttpRequestJson {
+            method: "POST",
+            url,
+            headers,
+            body,
+            timeout_ms: params.timeout_ms,
+        }
+    }
+
+    fn parse_embedding_response(&self, body: &[u8]) -> Result<EmbeddingResult, String> {
+        #[derive(serde::Deserialize)]
+        struct EmbeddingData {
+            embedding: Vec<f32>,
+        }
+        #[derive(serde::Deserialize, Default)]
+        struct EmbeddingUsage {
+            #[serde(default)]
+            prompt_tokens: u64,
+            #[serde(default)]
+            total_tokens: u64,
+        }
+        #[derive(serde::Deserialize)]
+        struct Response {
+            data: Vec<EmbeddingData>,
+            #[serde(default)]
+            model: String,
+            #[serde(default)]
+            usage: EmbeddingUsage,
+        }
+        let resp: Response = serde_json::from_slice(body)
+            .map_err(|e| format!("malformed openai embedding response: {e}"))?;
+        let datum = resp
+            .data
+            .into_iter()
+            .next()
+            .ok_or("openai embedding response has no data")?;
+        let dim = datum.embedding.len();
+        Ok(EmbeddingResult {
+            embedding: datum.embedding,
+            dim,
+            model: resp.model,
+            usage: Usage {
+                input_tokens: resp.usage.prompt_tokens,
+                output_tokens: 0,
             },
         })
     }
