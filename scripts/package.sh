@@ -202,8 +202,8 @@ cp "$manifest" "$version_dir/plugin.json"
 sha256=$(sha256sum "$archive_path" | awk '{print $1}')
 printf '%s  %s\n' "$sha256" "$archive_name" > "$version_dir/checksum.sha256"
 
-archive_url="https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/$slug/versions/$version/$archive_name"
-source_url="https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/$plugin_dir_name"
+archive_url="https://raw.githubusercontent.com/vynkor-core/vynkor-plugins/main/dist/$slug/versions/$version/$archive_name"
+source_url="https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/$plugin_dir_name"
 
 # ---- signing (optional) ----------------------------------------------------
 seed=""
