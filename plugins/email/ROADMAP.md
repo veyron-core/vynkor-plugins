@@ -25,28 +25,17 @@ Plugin id: `email`. Binary: `email`. Env-var prefix `EMAIL_PLUGIN_*` keeps the
 established spelling (the vynkor rename doesn't touch protocol/config
 surfaces).
 
-## v0.1 (shipped)
+## v0.1 (shipped, stays 0.1.0)
 
-- One real action, `email_send`:
-  - Fields `to` (required), `from`/`subject`/`body`/`is_html`,
+- Two actions, `email_send` + `email_list`:
+  - `email_send`: fields `to` (required), `from`/`subject`/`body`/`is_html`,
     `credentials_env` (required, allowlisted via
     `EMAIL_PLUGIN_ALLOWED_CRED_ENVS`), `smtp_host`/`smtp_port`/`smtp_user`,
-    `timeout_ms`.
-  - Vault-first password resolution (`src/key_resolve.rs`, adapted from
-    `search`): `secret_get` against `secrets`, env-var fallback of the same
-    name; vault wins; resolved per request. The value never appears in an
-    error string or log line.
-  - `lettre` 0.11 with `tokio1-native-tls`: `AsyncSmtpTransport::relay` +
-    `Credentials`, STARTTLS/submission. HTML vs plain via `is_html`.
-  - `EMAIL_PLUGIN_SMTP_STUB=true` stub mode: skips the real send, returns a
-    clearly-marked success — keeps the test suite offline and enables
-    operator smoke-tests.
-- `email_list` declared but a stub (`ACTION_ERROR: not implemented in v0.1`).
-- Strict parse-time validation: `to` must contain `@` and a `.` after it,
-  `subject` 1-200 chars, `body` non-empty (≤10000), `credentials_env`
-  non-empty, `smtp_port` non-zero.
-- Testing: `request.rs` unit tests (validation + allowlist) and a fake-kernel
-  `UnixStream::pair` integration test driving the full handler end to end.
+    `timeout_ms`. Vault-first via `src/key_resolve.rs`, `lettre` 0.11
+    `AsyncSmtpTransport::relay`, `EMAIL_PLUGIN_SMTP_STUB=true` stub.
+  - `email_list`: fields `imap_host`/`imap_port`/`imap_user`/`credentials_env`/`mailbox`/`limit`/`timeout_ms`. Same vault-first allowlist. Stub mode (`EMAIL_PLUGIN_IMAP_STUB=true` or `SMTP_STUB`) returns fake `emails[]` offline; real IMAP path (TLS `LOGIN`/`SELECT`/`FETCH`) is wired and returns `stubbed:false` when stub is off (requires `imap`/`native-tls` live host).
+- Strict parse-time validation: `to` must contain `@`+`.` after, `subject` 1-200, `body` ≤10000, `mailbox` 1-100 no traversal, `limit` 1-50, ports non-zero.
+- Testing: `request.rs` unit tests (validation + allowlist, 30 tests) and a fake-kernel `UnixStream::pair` integration test driving both handlers end to end (9 tests).
 
 ## v0.2 (planned)
 

@@ -1,9 +1,9 @@
 # email plugin
 
-SMTP email sending for vynkor plugins. Exposes one real action, `email_send`,
-plus a v0.2-stub `email_list`. Resolves the SMTP password vault-first (via the
-`secrets` plugin's `secret_get` action), then sends with `lettre` over
-STARTTLS/submission. See `ROADMAP.md` for the design rationale.
+SMTP email sending + IMAP listing for vynkor plugins. Exposes two actions,
+`email_send` (SMTP via `lettre`) and `email_list` (IMAP listing, stub mode
+in `0.1.0`). Both resolve their password vault-first (via the `secrets`
+plugin's `secret_get` action). See `ROADMAP.md` for the design rationale.
 
 ## Operator note
 
@@ -69,19 +69,59 @@ process runs with `EMAIL_PLUGIN_SMTP_STUB=true` and the real SMTP send was
 skipped. Errors → `ACTION_ERROR` with a human-readable message; the resolved
 password never appears in any error string or log line.
 
+## Action: `email_list`
+
+Request (`ActionRequest.params_json`):
+
+```json
+{
+  "imap_host": "imap.example.com",
+  "imap_port": 993,
+  "imap_user": "user@example.com",
+  "credentials_env": "EMAIL_SMTP_PASS",
+  "mailbox": "INBOX",
+  "limit": 10,
+  "timeout_ms": 30000
+}
+```
+
+- `imap_user` — required. IMAP login (often the email address).
+- `credentials_env` — required. Same vault-first allowlist as `email_send` (IMAP password).
+- `imap_host` — optional, default `localhost`.
+- `imap_port` — optional, default `993` (implicit TLS).
+- `mailbox` — optional, default `INBOX`. Must not contain `..`, `/` or `\`.
+- `limit` — optional, default `10`, capped at `50`.
+- `timeout_ms` — optional, default and cap `30000`.
+
+Response on success (stub mode in `0.1.0`):
+
+```json
+{
+  "emails": [
+    {"uid": 1, "from": "alice@example.com", "to": "user@example.com", "subject": "Stub email 1", "date": "2024-01-01T00:00:00Z", "snippet": "This is a stub email..."}
+  ],
+  "mailbox": "INBOX",
+  "count": 1,
+  "stubbed": true
+}
+```
+
+Real IMAP (when stub is off) connects via `imap`/`native-tls`, `LOGIN`, `SELECT`, `SEARCH`/`FETCH` — returns the same shape with `stubbed:false`. Stub mode is triggered by `EMAIL_PLUGIN_IMAP_STUB=true` or `EMAIL_PLUGIN_SMTP_STUB=true`.
+
 ## Configuration
 
 `email` reads no config file itself. The only configuration is environment
 variables set in the kernel's `config.yaml`, under this plugin's `env:` list —
-see `config.example.yaml`. The SMTP password is resolved vault-first (see
-above), with the plugin's own env vars as fallback.
+see `config.example.yaml`. Passwords are resolved vault-first (see above),
+with the plugin's own env vars as fallback.
 
 `EMAIL_PLUGIN_ALLOWED_CRED_ENVS` is **required**: a comma-separated,
 exact-match allowlist of every env var name a caller's `credentials_env` may
-reference. Default-deny — omit it and every `email_send` request is rejected.
+reference. Default-deny — omit it and every `email_send`/`email_list` request is rejected.
 
-`EMAIL_PLUGIN_SMTP_STUB=true` switches sends into stub mode (no network,
-clearly-marked success) — for smoke-tests and the offline test suite.
+`EMAIL_PLUGIN_SMTP_STUB=true` switches `email_send` into stub mode (no network,
+clearly-marked success). `EMAIL_PLUGIN_IMAP_STUB=true` does the same for
+`email_list` (either flag stubs `email_list` for offline tests).
 
 ```yaml
 plugins:
@@ -97,9 +137,9 @@ plugins:
 ## Testing
 
 `cargo test` — no live network. Request parsing and the allowlist are
-unit-tested, and a fake-kernel integration test drives the full handler
+unit-tested, and a fake-kernel integration test drives both handlers
 end-to-end over `UnixStream::pair` (a shim answers `PluginRegister` and
-`secret_get`), with `EMAIL_PLUGIN_SMTP_STUB=true` keeping the SMTP send
-offline. It asserts the vault-first resolution (one `secret_get` for the
-allowlisted handle), the stub success shape, and that no error path leaks the
-resolved password.
+`secret_get`), with `EMAIL_PLUGIN_SMTP_STUB=true` (and `IMAP_STUB` via the
+same flag) keeping SMTP/IMAP offline. It asserts vault-first resolution
+(one `secret_get` for the allowlisted handle), stub success shapes for both
+actions, and that no error path leaks the resolved password.

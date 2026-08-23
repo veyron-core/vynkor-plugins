@@ -10,6 +10,9 @@ use vynkor_sdk::VynkorClient;
 
 use crate::request::{self, EmailSendParams};
 
+trait ImapStream: std::io::Read + std::io::Write {}
+impl<T: std::io::Read + std::io::Write> ImapStream for T {}
+
 /// When set to the exact string `true`, `handle_email_send` skips the real
 /// SMTP send and returns a successful, clearly-marked stub response.
 const SMTP_STUB_ENV: &str = "EMAIL_PLUGIN_SMTP_STUB";
@@ -182,8 +185,166 @@ pub async fn handle_email_list(
         .map_err(|e| format!("failed to encode stub response: {e}"));
     }
 
-    Err(format!(
-        "real IMAP listing not configured for host '{}:{}' — set {}=true or {}=true for stub mode",
-        params.imap_host, params.imap_port, IMAP_STUB_ENV, SMTP_STUB_ENV
-    ))
+    let imap_host = params.imap_host.clone();
+    let imap_port = params.imap_port;
+    let imap_user = params.imap_user.clone();
+    let mailbox = params.mailbox.clone();
+    let limit = params.limit;
+    let timeout_ms = params.timeout_ms;
+    let password_clone = _password.clone();
+
+    let fetched = tokio::task::spawn_blocking(move || {
+        fetch_via_imap_sync(
+            &imap_host,
+            imap_port,
+            &imap_user,
+            &password_clone,
+            &mailbox,
+            limit,
+            timeout_ms,
+        )
+    })
+    .await
+    .map_err(|e| format!("IMAP task join failed: {e}"))??;
+
+    serde_json::to_vec(&fetched).map_err(|e| format!("failed to encode response: {e}"))
+}
+
+fn fetch_via_imap_sync(
+    host: &str,
+    port: u16,
+    user: &str,
+    password: &str,
+    mailbox: &str,
+    limit: usize,
+    timeout_ms: u64,
+) -> Result<serde_json::Value, String> {
+    use std::net::{TcpStream, ToSocketAddrs};
+    use std::time::Duration;
+
+    let addr = format!("{host}:{port}");
+    let socket_addr = addr
+        .to_socket_addrs()
+        .map_err(|e| format!("IMAP DNS failed for {host}:{port}: {e}"))?
+        .next()
+        .ok_or_else(|| format!("IMAP DNS no addr for {host}:{port}"))?;
+    let tcp = TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout_ms))
+        .map_err(|e| format!("IMAP connect failed to {host}:{port}: {e}"))?;
+    tcp.set_read_timeout(Some(Duration::from_millis(timeout_ms)))
+        .map_err(|e| format!("IMAP set timeout failed: {e}"))?;
+    tcp.set_write_timeout(Some(Duration::from_millis(timeout_ms)))
+        .map_err(|e| format!("IMAP set timeout failed: {e}"))?;
+
+    let fetch_and_build = |mut session: imap::Session<Box<dyn ImapStream + Send>>| {
+        session
+            .select(mailbox)
+            .map_err(|e| format!("IMAP SELECT {mailbox} failed: {e}"))?;
+        let search: std::collections::HashSet<u32> = session
+            .search("ALL")
+            .map_err(|e| format!("IMAP SEARCH failed: {e}"))?;
+        if search.is_empty() {
+            let _ = session.logout();
+            return Ok(serde_json::json!({
+                "emails": [],
+                "mailbox": mailbox,
+                "count": 0,
+                "stubbed": false
+            }));
+        }
+        let mut seqs: Vec<u32> = search.into_iter().collect();
+        seqs.sort_unstable();
+        if seqs.len() > limit {
+            seqs = seqs[seqs.len() - limit..].to_vec();
+        }
+        let seq_set = seqs
+            .iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        let fetches = session
+            .fetch(seq_set, "(UID ENVELOPE)")
+            .map_err(|e| format!("IMAP FETCH failed: {e}"))?;
+        let mut emails = Vec::new();
+        for fetch in fetches.iter() {
+            let uid = fetch.uid.unwrap_or(0);
+            let env = fetch.envelope();
+            let (from, subject, date) = if let Some(e) = env {
+                let from = e
+                    .from
+                    .as_ref()
+                    .and_then(|v| v.first())
+                    .map(|a| {
+                        let mbox = a
+                            .mailbox
+                            .as_ref()
+                            .map(|m| String::from_utf8_lossy(m).to_string())
+                            .unwrap_or_default();
+                        let host = a
+                            .host
+                            .as_ref()
+                            .map(|h| String::from_utf8_lossy(h).to_string())
+                            .unwrap_or_default();
+                        if mbox.is_empty() && host.is_empty() {
+                            "unknown@example.com".to_string()
+                        } else if host.is_empty() {
+                            mbox
+                        } else {
+                            format!("{mbox}@{host}")
+                        }
+                    })
+                    .unwrap_or_else(|| "unknown@example.com".to_string());
+                let subject = e
+                    .subject
+                    .as_ref()
+                    .map(|s| String::from_utf8_lossy(s).to_string())
+                    .unwrap_or_default();
+                let date = e
+                    .date
+                    .as_ref()
+                    .map(|d| String::from_utf8_lossy(d).to_string())
+                    .unwrap_or_default();
+                (from, subject, date)
+            } else {
+                ("unknown@example.com".to_string(), String::new(), String::new())
+            };
+            emails.push(serde_json::json!({
+                "uid": uid,
+                "from": from,
+                "to": user,
+                "subject": subject,
+                "date": date,
+                "snippet": subject
+            }));
+        }
+        let count = emails.len();
+        let _ = session.logout();
+        Ok(serde_json::json!({
+            "emails": emails,
+            "mailbox": mailbox,
+            "count": count,
+            "stubbed": false
+        }))
+    };
+
+    if port == 993 {
+        let tls = native_tls::TlsConnector::new()
+            .map_err(|e| format!("TLS init failed: {e}"))?;
+        let tls_stream = tls
+            .connect(host, tcp)
+            .map_err(|e| format!("TLS connect failed to {host}:{port}: {e}"))?;
+        let tls_box: Box<dyn ImapStream + Send> = Box::new(tls_stream);
+        let client = imap::Client::new(tls_box);
+        let session = client
+            .login(user, password)
+            .map_err(|(e, _)| format!("IMAP login failed: {e}"))?;
+        let boxed: imap::Session<Box<dyn ImapStream + Send>> = session;
+        fetch_and_build(boxed)
+    } else {
+        let plain_box: Box<dyn ImapStream + Send> = Box::new(tcp);
+        let client = imap::Client::new(plain_box);
+        let session = client
+            .login(user, password)
+            .map_err(|(e, _)| format!("IMAP login failed: {e}"))?;
+        fetch_and_build(session)
+    }
 }

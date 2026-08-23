@@ -41,10 +41,11 @@ plugins:
       # gates the handle either way.
       - EMAIL_SMTP_PASS=<smtp password>
 
-      # Optional smoke-test mode: skip the real SMTP send and return a
+      # Optional smoke-test mode: skip the real SMTP/IMAP and return a
       # clearly-marked stub success. Remove (or set to anything but "true")
-      # for real sends.
+      # for real sends. Either flag stubs email_list.
       # - EMAIL_PLUGIN_SMTP_STUB=true
+      # - EMAIL_PLUGIN_IMAP_STUB=true
     grace_seconds: 10
     max_procs: 64
     max_vmem_mb: 256
