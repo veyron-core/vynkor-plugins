@@ -6,7 +6,7 @@
 
 #[cfg(test)]
 use std::collections::HashMap;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 #[cfg(test)]
 use std::sync::Mutex;
 use std::time::Duration;
@@ -160,6 +160,12 @@ pub trait Runner: Send + Sync {
 
 pub struct RealRunner;
 
+/// After a writer's direct child exits, give its pipes this long to reach
+/// EOF before proceeding with whatever was flushed. Tools that fork a daemon
+/// (wl-copy) never reach EOF — the inherited pipe copies die with the daemon
+/// — so this bounds the wait instead of hanging forever.
+const PIPE_GRACE_MS: u64 = 150;
+
 #[async_trait]
 impl Runner for RealRunner {
     async fn run(
@@ -173,7 +179,8 @@ impl Runner for RealRunner {
         cmd.args(args)
             .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
 
         let mut child = cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -183,45 +190,65 @@ impl Runner for RealRunner {
             }
         })?;
 
-        if let Some(text) = stdin {
-            if let Some(mut handle) = child.stdin.take() {
-                handle.write_all(text.as_bytes()).await.map_err(|e| {
-                    format!("ERR_CLIPBOARD_WRITE_FAILED: stdin to '{bin}' failed: {e}")
-                })?;
-                handle.shutdown().await.ok();
-            }
-        }
+        let outcome = tokio::time::timeout(Duration::from_millis(timeout_ms), async {
+                if let Some(text) = stdin {
+                    if let Some(mut handle) = child.stdin.take() {
+                        handle.write_all(text.as_bytes()).await.map_err(|e| {
+                            format!("ERR_CLIPBOARD_WRITE_FAILED: stdin to '{bin}' failed: {e}")
+                        })?;
+                        handle.shutdown().await.ok();
+                    }
+                }
 
-        let mut stdout_pipe = child.stdout.take();
-        let mut stderr_pipe = child.stderr.take();
-        let mut out_buf = Vec::new();
-        let mut err_buf = Vec::new();
+                let mut out_buf = Vec::new();
+                let mut err_buf = Vec::new();
+                let mut stdout_pipe = child.stdout.take();
+                let mut stderr_pipe = child.stderr.take();
 
-        let drain_stdout = async {
-            if let Some(p) = stdout_pipe.as_mut() {
-                let _ = tokio::io::AsyncReadExt::read_to_end(p, &mut out_buf).await;
-            }
-        };
-        let drain_stderr = async {
-            if let Some(p) = stderr_pipe.as_mut() {
-                let _ = tokio::io::AsyncReadExt::read_to_end(p, &mut err_buf).await;
-            }
-        };
+                let drain_stdout = async {
+                    if let Some(p) = stdout_pipe.as_mut() {
+                        let _ = tokio::io::AsyncReadExt::read_to_end(p, &mut out_buf).await;
+                    }
+                };
+                let drain_stderr = async {
+                    if let Some(p) = stderr_pipe.as_mut() {
+                        let _ = tokio::io::AsyncReadExt::read_to_end(p, &mut err_buf).await;
+                    }
+                };
 
-        let waited = {
-            let wait = child.wait();
-            tokio::pin!(wait);
-            let (_, _, res) = tokio::join!(drain_stdout, drain_stderr, async { wait.await });
-            res
-        };
+                if stdin.is_some() {
+                    let status = child.wait().await.map_err(|e| {
+                        format!("ERR_CLIPBOARD_READ_FAILED: wait '{bin}' failed: {e}")
+                    })?;
+                    if !status.success() {
+                        // A failed writer exits without daemonizing, so its
+                        // pipes hit EOF on their own; the bound only guards a
+                        // misbehaving provider.
+                        let _ = tokio::time::timeout(
+                            Duration::from_millis(PIPE_GRACE_MS),
+                            async { tokio::join!(drain_stdout, drain_stderr) },
+                        )
+                        .await;
+                    }
+                    Ok((out_buf, err_buf, status))
+                } else {
+                    let (_, _, res) = tokio::join!(drain_stdout, drain_stderr, async {
+                        child.wait().await.map_err(|e| {
+                            format!("ERR_CLIPBOARD_READ_FAILED: wait '{bin}' failed: {e}")
+                        })
+                    });
+                    let status = res?;
+                    Ok((out_buf, err_buf, status))
+                }
+            })
+            .await;
 
-        match tokio::time::timeout(Duration::from_millis(timeout_ms), async { waited }).await {
-            Err(_) => {
-                let _ = child.start_kill();
-                Err(format!("ERR_CLIPBOARD_TIMEOUT: '{bin}' exceeded {timeout_ms}ms"))
-            }
-            Ok(Err(e)) => Err(format!("ERR_CLIPBOARD_READ_FAILED: wait '{bin}' failed: {e}")),
-            Ok(Ok(status)) if !status.success() => {
+        match outcome {
+            Err(_) => Err(format!(
+                "ERR_CLIPBOARD_TIMEOUT: '{bin}' exceeded {timeout_ms}ms"
+            )),
+            Ok(Err(msg)) => Err(msg),
+            Ok(Ok((_, err_buf, status))) if !status.success() => {
                 let stderr = String::from_utf8_lossy(&err_buf);
                 let trimmed = stderr.trim();
                 Err(format!(
@@ -229,7 +256,7 @@ impl Runner for RealRunner {
                     if trimmed.is_empty() { "(no stderr)" } else { trimmed }
                 ))
             }
-            Ok(Ok(_)) => Ok(out_buf),
+            Ok(Ok((out_buf, _, _))) => Ok(out_buf),
         }
     }
 }
@@ -350,5 +377,58 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("ERR_CLIPBOARD_PROVIDER_MISSING"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn real_runner_write_completes_when_child_daemonizes_holding_pipes() {
+        let start = std::time::Instant::now();
+        let out = RealRunner
+            .run("sh", &["-c", "sleep 3 & exit 0"], Some("x"), 5_000)
+            .await
+            .expect("writer must complete on child exit, not pipe EOF");
+        let elapsed = start.elapsed();
+        assert!(out.is_empty());
+        assert!(
+            elapsed < std::time::Duration::from_millis(2_000),
+            "write took {elapsed:?}; the daemonized `sleep 3` must not block it"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn real_runner_timeout_actually_bounds_a_stuck_child() {
+        let start = std::time::Instant::now();
+        let err = RealRunner
+            .run("sh", &["-c", "sleep 30"], None, 300)
+            .await
+            .unwrap_err();
+        let elapsed = start.elapsed();
+        assert!(err.contains("ERR_CLIPBOARD_TIMEOUT"), "{err}");
+        assert!(
+            elapsed < std::time::Duration::from_millis(3_000),
+            "timeout fired after {elapsed:?}; must fire near the 300ms budget"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn real_runner_writer_stderr_preserved_on_failure() {
+        let err = RealRunner
+            .run("sh", &["-c", "echo oops >&2; exit 7"], Some(""), 5_000)
+            .await
+            .unwrap_err();
+        assert!(err.contains("exited with"), "{err}");
+        assert!(err.contains("oops"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn real_runner_read_returns_stdout() {
+        let out = RealRunner
+            .run("sh", &["-c", "printf hello"], None, 5_000)
+            .await
+            .unwrap();
+        assert_eq!(out, b"hello".to_vec());
     }
 }

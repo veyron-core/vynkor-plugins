@@ -64,3 +64,52 @@ impl Plugin for PingPongPlugin {
 async fn main() -> Result<(), VynkorError> {
     PingPongPlugin.run().await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ping_request(action: &str) -> Envelope {
+        Envelope {
+            payload: Some(envelope::Payload::ActionRequest(
+                vynkor_sdk::proto::ActionRequest {
+                    action_id: "test-1".to_string(),
+                    action: action.to_string(),
+                    ..Default::default()
+                },
+            )),
+            ..Default::default()
+        }
+    }
+
+    /// Regression guard for live-audit defect #3: a pre-M9 binary answered
+    /// with `status=0` because ACTION_OK used to be 0; since M9 zero means
+    /// ACTION_UNKNOWN and must never be sent as a success status.
+    #[tokio::test]
+    async fn pong_replies_action_ok_not_zero() {
+        let reply = PingPongPlugin
+            .on_message(ping_request("ping"))
+            .await
+            .unwrap()
+            .expect("ping must be answered");
+        let Some(envelope::Payload::ActionResponse(resp)) = reply.payload else {
+            panic!("expected ActionResponse payload");
+        };
+        assert_eq!(resp.status, ActionStatus::ActionOk as i32);
+        assert_ne!(resp.status, 0, "ACTION_OK is non-zero since M9");
+        assert_eq!(std::str::from_utf8(&resp.data_json).unwrap(), r#"{"reply":"pong"}"#);
+    }
+
+    #[tokio::test]
+    async fn unknown_action_replies_not_found() {
+        let reply = PingPongPlugin
+            .on_message(ping_request("nope"))
+            .await
+            .unwrap()
+            .expect("any ActionRequest must be answered");
+        let Some(envelope::Payload::ActionResponse(resp)) = reply.payload else {
+            panic!("expected ActionResponse payload");
+        };
+        assert_eq!(resp.status, ActionStatus::ActionNotFound as i32);
+    }
+}
