@@ -15,6 +15,7 @@
 //! for the design rationale.
 
 use stt_plugin::handler;
+use stt_plugin::vad::{VadConfig, SPEECH_ENDED_EVENT_TYPE, SPEECH_STARTED_EVENT_TYPE};
 use vynkor_sdk::proto::{
     envelope, ActionResponse, ActionStatus, AudioCodec, Envelope, PluginManifest, Pong,
 };
@@ -150,6 +151,14 @@ async fn serve(mut client: VynkorClient) -> Result<(), VynkorError> {
     }
     println!("[{PLUGIN_ID}] registered with kernel");
 
+    let vad_cfg = VadConfig::from_env();
+    if vad_cfg.enabled {
+        println!(
+            "[{PLUGIN_ID}] voice-activity detection on (rms {}, silence {} ms, min speech {} ms)",
+            vad_cfg.rms_threshold, vad_cfg.silence_ms, vad_cfg.min_speech_ms
+        );
+    }
+
     loop {
         let env = match client.recv().await {
             Ok(env) => env,
@@ -175,6 +184,8 @@ async fn serve(mut client: VynkorClient) -> Result<(), VynkorError> {
             Some(envelope::Payload::AudioStreamChunk(chunk)) => {
                 // D-12 listen path: accumulate PCM from a mic peer; the
                 // transcript is produced by the stt_listen_stop action.
+                // With the VAD enabled, speech boundaries also go out as
+                // best-effort events for orchestrators like `daemon`.
                 if chunk.codec != AudioCodec::PcmS16le as i32 {
                     println!(
                         "[{PLUGIN_ID}] ignoring audio stream {} codec {} (expected PCM_S16LE)",
@@ -182,13 +193,15 @@ async fn serve(mut client: VynkorClient) -> Result<(), VynkorError> {
                     );
                     continue;
                 }
-                if let Err(e) = stt_plugin::listen::push(
+                match stt_plugin::listen::push(
                     chunk.stream_id,
                     chunk.sample_rate,
                     chunk.channels.max(1) as u16,
                     &chunk.data,
+                    &vad_cfg,
                 ) {
-                    println!("[{PLUGIN_ID}] {e}");
+                    Ok(outcome) => publish_vad(&mut client, chunk.stream_id, outcome).await,
+                    Err(e) => println!("[{PLUGIN_ID}] {e}"),
                 }
             }
             Some(envelope::Payload::ActionRequest(req)) => {
@@ -203,6 +216,28 @@ async fn serve(mut client: VynkorClient) -> Result<(), VynkorError> {
 
     println!("[{PLUGIN_ID}] shutting down");
     Ok(())
+}
+
+async fn publish_vad(client: &mut VynkorClient, stream_id: u32, outcome: stt_plugin::listen::ChunkVad) {
+    if outcome.speech_started {
+        let payload = serde_json::json!({ "stream_id": stream_id });
+        if let Err(e) = client
+            .publish_event(SPEECH_STARTED_EVENT_TYPE, payload.to_string().as_bytes(), 5000)
+            .await
+        {
+            eprintln!("[{PLUGIN_ID}] failed to publish {SPEECH_STARTED_EVENT_TYPE}: {e}");
+        }
+    }
+    if let Some(speech_ms) = outcome.speech_ended_ms {
+        let payload =
+            serde_json::json!({ "stream_id": stream_id, "speech_ms": speech_ms });
+        if let Err(e) = client
+            .publish_event(SPEECH_ENDED_EVENT_TYPE, payload.to_string().as_bytes(), 5000)
+            .await
+        {
+            eprintln!("[{PLUGIN_ID}] failed to publish {SPEECH_ENDED_EVENT_TYPE}: {e}");
+        }
+    }
 }
 
 #[tokio::main]

@@ -1,6 +1,6 @@
 {
   "plugin_id": "daemon",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "permissions": ["PERMISSION_AUDIO", "PERMISSION_EVENT_PUBLISH"],
   "kernel_compatibility_range": {
     "min": "0.1.0",

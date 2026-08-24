@@ -84,8 +84,8 @@ hand (and the only way to use voice turns while the loop is disabled).
 {}
 ```
 
-…listens for `DAEMON_PLUGIN_TURN_MS` and processes whatever it hears. With
-a `text` override the mic/stt stages are skipped entirely:
+…listens per the configured mode (see Configuration) and processes whatever
+it hears. With a `text` override the mic/stt stages are skipped entirely:
 
 ```json
 { "text": "summarize my notes" }
@@ -107,7 +107,7 @@ a `text` override the mic/stt stages are skipped entirely:
 | status | meaning |
 |---|---|
 | `answered` | transcript → goal completed → answer spoken |
-| `silent` | empty/whitespace transcript after the window; no agent/tts/sound calls were made |
+| `silent` | empty/whitespace transcript after the endpoint; no agent/tts/sound calls were made |
 | `error` | a stage failed; `error` names it (e.g. `"mic_start failed: …"`) |
 
 Always ACTION_OK — check `status`. While another turn is running:
@@ -124,13 +124,30 @@ ever cut off mid-capture. The loop starts **off** unless
 ### `daemon_status`
 
 ```json
-{ "enabled": false, "busy": false, "turns_completed": 3,
+{ "enabled": false, "busy": false, "capturing": false, "mode": "window",
+  "turns_completed": 3,
   "last_turn": { "status": "answered", "transcript": "…", "answer": "…",
                  "duration_ms": 8120 } }
 ```
 
 `last_turn` is null before the first turn. `daemon_say` does not count as a
-turn.
+turn. `mode` echoes `DAEMON_PLUGIN_MODE`; `capturing` is true while the
+mic is actually open (vad/ptt hold it open-endedly).
+
+## Listen modes
+
+| Mode | Endpoint | Needs | Feels like |
+|---|---|---|---|
+| `window` | fixed `TURN_MS` elapses | nothing | walkie-talkie with a timer |
+| `vad` | stt's speech-ended event (silence after real speech), capped by wait/utterance budgets | `STT_PLUGIN_VAD=on` on stt | hands-free: enable once, talk whenever |
+| `ptt` | hotkey released (`DAEMON_PLUGIN_PTT_BINDING`) | `hotkey` plugin registered + binding | push-to-talk |
+
+All modes feed the same turn pipeline; switch via env, no code changes.
+In vad mode a turn that hears no speech within `VAD_WAIT_MS` ends
+`silent`; an utterance that never ends within `VAD_MAX_UTTERANCE_MS` is cut
+off and transcribed anyway. In ptt mode a key held past
+`PTT_MAX_HOLD_MS` auto-releases and the turn reports `error`
+("hotkey release never arrived").
 
 ## Events
 
@@ -148,7 +165,12 @@ config.yaml / drop-in); see `config.example.yaml`.
 | Env var | Default | Meaning |
 |---|---|---|
 | `DAEMON_PLUGIN_ENABLED` | `false` | start with the listen loop on |
-| `DAEMON_PLUGIN_TURN_MS` | `6000` | mic capture window per voice turn (100–120000) |
+| `DAEMON_PLUGIN_MODE` | `window` | `window` \| `vad` \| `ptt` — see Listen modes above |
+| `DAEMON_PLUGIN_TURN_MS` | `6000` | window mode: mic capture window per turn (100–120000); manual turns in ptt mode also use it |
+| `DAEMON_PLUGIN_VAD_WAIT_MS` | `30000` | vad mode: max silence before any speech (1000–600000) |
+| `DAEMON_PLUGIN_VAD_MAX_UTTERANCE_MS` | `20000` | vad mode: hard cap on one utterance (500–120000) |
+| `DAEMON_PLUGIN_PTT_BINDING` | `ptt` | ptt mode: hotkey binding id that triggers a turn |
+| `DAEMON_PLUGIN_PTT_MAX_HOLD_MS` | `60000` | ptt mode: stuck-key auto-release cap (500–600000) |
 | `DAEMON_PLUGIN_GAP_MS` | `2000` | idle gap between loop turns (50–3600000) |
 | `DAEMON_PLUGIN_SAMPLE_RATE_HZ` | `16000` | capture rate negotiated with stt |
 | `DAEMON_PLUGIN_CHUNK_MS` | `100` | mic chunk duration |
@@ -174,7 +196,11 @@ sandbox: true            # no sockets of its own; all I/O is kernel-routed
 auto_start: true
 env:
   - DAEMON_PLUGIN_ENABLED=true
-  - DAEMON_PLUGIN_TURN_MS=6000
+  # Hands-free ("walk & talk"): end turns on silence instead of a timer.
+  - DAEMON_PLUGIN_MODE=vad
+  # Or push-to-talk with the hotkey plugin:
+  # - DAEMON_PLUGIN_MODE=ptt
+  # - DAEMON_PLUGIN_PTT_BINDING=ptt
   # Under a secured kernel also add the frame-MAC secret and a JWT whose
   # sub=daemon and whose claims carry PERMISSION_AUDIO +
   # PERMISSION_EVENT_PUBLISH (claims override the manifest):

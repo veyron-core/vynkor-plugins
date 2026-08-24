@@ -1,0 +1,27 @@
+[package]
+name = "hotkey-plugin"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "hotkey_plugin"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hotkey"
+path = "src/main.rs"
+
+[dependencies]
+vynkor-sdk = "0.0.3"
+vynkor-wire = "0.0.2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Same stack as the media plugin: session-bus D-Bus without the blocking API.
+zbus = { version = "4", default-features = false, features = ["tokio"] }
+zvariant = "4"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }

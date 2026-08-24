@@ -51,6 +51,20 @@ plugins:
       # Optional: decoding language for whisper-family models (ISO-639-1).
       # Default "en". A caller-supplied language param overrides it.
       # - STT_PLUGIN_LOCAL_LANGUAGE=en
+      # --- Optional: energy voice-activity detection on the listen path ----
+      # Off by default. When on, the listen accumulator runs a per-chunk RMS
+      # VAD and publishes speech boundaries as best-effort events — this is
+      # what the daemon's DAEMON_PLUGIN_MODE=vad keys its turn endpointing
+      # on ("user stopped talking" instead of a fixed capture window).
+      # - STT_PLUGIN_VAD=on
+      # Per-chunk RMS threshold on s16 samples (default 500; desktop mics
+      # idle under ~200, speech peaks 1000+).
+      # - STT_PLUGIN_VAD_RMS_THRESHOLD=500
+      # Silence hangover that closes an utterance, ms (default 1200).
+      # - STT_PLUGIN_VAD_SILENCE_MS=1200
+      # Minimum measured speech before an ending counts, ms (default 240);
+      # shorter blips reset quietly without an event.
+      # - STT_PLUGIN_VAD_MIN_SPEECH_MS=240
     grace_seconds: 10
     max_procs: 64
     # Local inference loads the model into RAM. Zipformer int8 models are
