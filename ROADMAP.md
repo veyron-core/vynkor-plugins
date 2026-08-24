@@ -56,7 +56,7 @@ Dependency order — each row can start once everything in "depends on" ships.
 | `home` | home automation over a custom protocol to bare-metal devices (ESP32/Arduino) — not Home Assistant/MQTT, own wire format | `network` (or serial/BLE transport, TBD) | `PERMISSION_HOME` (defined, proto v1.4) |
 | `browser` | read/control active browser tab (url/title/DOM/screenshot) — native-messaging host (the actual plugin, built on `veyron-sdk-rust`) + a browser extension (Chrome/Firefox) as the tab-access side | — | `PERMISSION_BROWSER` (existing, unused today) |
 | `cloud-sync` | remote snapshot transport for D-13 `sync` state — S3/WebDAV/rsync.net via `network`'s gated `http_request`; the host↔remote leg that `sync`/`sync-client` leave host-local (timer pull/push, conflict wins host) | `sync`, `network`, `secrets` (remote creds) | `PERMISSION_NETWORK` (caller of gated `http_request`), `PERMISSION_SECRETS` |
-| `agent` | multi-step goal loop: `ai` chat + tool-call dispatch to other plugins' actions, state persisted | `ai`, `database`, `vector-db`, `scheduler` | none itself — inherits from what it calls |
+| `agent` | `plugins/agent/` | — | multi-step goal loop: `ai` chat + tool-call dispatch to other plugins' actions, state persisted. **Shipped** (v0.1.0, see the Shipped table) — tool discovery runs over new kernel read-only commands (`list_plugins` + `get_manifest` exemption from `PERMISSION_KERNEL_ADMIN`, see "Kernel-side changes needed") | `ai`, `database` | storage, event_publish (+ operator JWT grant for dispatched actions) |
 | `webclient` | browser chat UI + mic voice input/TTS playback, talks to kernel WS API | `agent` (Kairo), `stt`, `tts` | none itself — client only, auth via kernel JWT |
 | `daemon` | headless background service: mic listen loop, TTS output, no window/browser | `agent` (Kairo), `stt`, `tts` | none itself — client only, auth via kernel JWT |
 | `telegram` | third client: two-way chat + voice notes via Telegram bot API | `agent` (Kairo), `stt`, `tts`, `secrets` (bot token) | none itself — client only |
@@ -286,6 +286,15 @@ What's actually new, in `veyron`:
   `PermissionNetwork` today). None of the planned plugins expose a
   primitive like that, so no additions expected — evaluate per-plugin as
   each one lands, not a bulk change now.
+- **Read-only discovery commands for the agent — shipped (2026-08).**
+  `list_plugins` (new `CommandHandler` arm: registered plugins with their
+  actions) joined the existing `get_manifest`, and both are exempt from the
+  `PERMISSION_KERNEL_ADMIN` gate alongside `health_check`
+  (`READONLY_COMMANDS` in `veyron/src/ipc/protocol.rs`). This is what lets
+  the `agent` plugin pull tool specs from registered manifests without
+  holding admin. Read-only by construction and the data is public
+  distribution metadata (it ships in registry.json); every mutating command
+  stays admin-gated.
 - **`daemon`'s always-on lifecycle** — resolved by the kernel's R10-01/R10-04
   (2026-08): a plugin in `plugins.d/` is auto-spawned at boot and `vyn plugin
   enable|disable <slug>` toggles that. `daemon` needs no kernel change — just
