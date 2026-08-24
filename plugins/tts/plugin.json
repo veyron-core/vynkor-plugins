@@ -1,14 +1,22 @@
 {
   "plugin_id": "tts",
-  "version": "0.3.0",
-  "permissions": ["network", "PERMISSION_AUDIO_STREAM", "PERMISSION_IPC_SEND", "secrets"],
+  "version": "0.1.0",
+  "permissions": [
+    "network",
+    "PERMISSION_AUDIO_STREAM",
+    "PERMISSION_IPC_SEND",
+    "secrets"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "tts",
   "events": [],
-  "files": ["tts", "plugin.json"],
+  "files": [
+    "tts",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "tts_synthesize",
@@ -17,7 +25,11 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": ["sherpa", "openai", "elevenlabs"],
+            "enum": [
+              "sherpa",
+              "openai",
+              "elevenlabs"
+            ],
             "description": "sherpa = in-process local ONNX; openai/elevenlabs = cloud via network. Required."
           },
           "text": {
@@ -36,7 +48,15 @@
           },
           "format": {
             "type": "string",
-            "enum": ["wav", "pcm", "mp3", "opus", "aac", "flac", "ulaw"],
+            "enum": [
+              "wav",
+              "pcm",
+              "mp3",
+              "opus",
+              "aac",
+              "flac",
+              "ulaw"
+            ],
             "description": "Per-provider subset: sherpa wav|pcm|mp3 (default wav); openai mp3|wav|pcm|opus|aac|flac (default mp3); elevenlabs mp3|pcm|ulaw (default mp3)."
           },
           "speed": {
@@ -61,19 +81,52 @@
             "description": "Optional per-provider model override (defaults: gpt-4o-mini-tts, eleven_multilingual_v2)."
           }
         },
-        "required": ["provider", "text", "voice"],
+        "required": [
+          "provider",
+          "text",
+          "voice"
+        ],
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "format": { "type": "string", "enum": ["wav", "pcm", "mp3", "opus", "aac", "flac", "ulaw"] },
-          "sample_rate_hz": { "type": "integer", "description": "0 when the container can't carry it (mp3/opus/aac/flac from a cloud provider)." },
-          "num_channels": { "type": "integer", "description": "0 when the container can't carry it." },
-          "duration_seconds": { "type": "number", "description": "0 when the container can't carry it." },
-          "audio_base64": { "type": "string", "description": "Base64-encoded audio bytes." }
+          "format": {
+            "type": "string",
+            "enum": [
+              "wav",
+              "pcm",
+              "mp3",
+              "opus",
+              "aac",
+              "flac",
+              "ulaw"
+            ]
+          },
+          "sample_rate_hz": {
+            "type": "integer",
+            "description": "0 when the container can't carry it (mp3/opus/aac/flac from a cloud provider)."
+          },
+          "num_channels": {
+            "type": "integer",
+            "description": "0 when the container can't carry it."
+          },
+          "duration_seconds": {
+            "type": "number",
+            "description": "0 when the container can't carry it."
+          },
+          "audio_base64": {
+            "type": "string",
+            "description": "Base64-encoded audio bytes."
+          }
         },
-        "required": ["format", "sample_rate_hz", "num_channels", "duration_seconds", "audio_base64"],
+        "required": [
+          "format",
+          "sample_rate_hz",
+          "num_channels",
+          "duration_seconds",
+          "audio_base64"
+        ],
         "additionalProperties": false
       }
     },
@@ -84,11 +137,17 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": ["sherpa", "openai", "elevenlabs"],
+            "enum": [
+              "sherpa",
+              "openai",
+              "elevenlabs"
+            ],
             "description": "elevenlabs is rejected: voices are per-account."
           }
         },
-        "required": ["provider"],
+        "required": [
+          "provider"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -96,10 +155,17 @@
         "items": {
           "type": "object",
           "properties": {
-            "id": { "type": "string" },
-            "name": { "type": "string" }
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
           },
-          "required": ["id", "name"],
+          "required": [
+            "id",
+            "name"
+          ],
           "additionalProperties": false
         }
       }
@@ -111,7 +177,9 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": ["sherpa"],
+            "enum": [
+              "sherpa"
+            ],
             "description": "tts_speak is sherpa-only: streaming needs a PCM source, which only the local provider has."
           },
           "text": {
@@ -137,7 +205,13 @@
           },
           "sample_rate_hz": {
             "type": "integer",
-            "enum": [8000, 12000, 16000, 24000, 48000],
+            "enum": [
+              8000,
+              12000,
+              16000,
+              24000,
+              48000
+            ],
             "description": "Advertised stream rate. Defaults to the model's output rate; must be an Opus-supported rate."
           },
           "bitrate": {
@@ -160,21 +234,52 @@
             "default": 60000
           }
         },
-        "required": ["provider", "text", "voice", "target"],
+        "required": [
+          "provider",
+          "text",
+          "voice",
+          "target"
+        ],
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "codec": { "type": "string", "enum": ["opus"] },
-          "stream_id": { "type": "integer" },
-          "target": { "type": "string" },
-          "sample_rate_hz": { "type": "integer" },
-          "num_channels": { "type": "integer" },
-          "duration_seconds": { "type": "number" },
-          "packets": { "type": "integer", "description": "Number of Opus packets streamed." }
+          "codec": {
+            "type": "string",
+            "enum": [
+              "opus"
+            ]
+          },
+          "stream_id": {
+            "type": "integer"
+          },
+          "target": {
+            "type": "string"
+          },
+          "sample_rate_hz": {
+            "type": "integer"
+          },
+          "num_channels": {
+            "type": "integer"
+          },
+          "duration_seconds": {
+            "type": "number"
+          },
+          "packets": {
+            "type": "integer",
+            "description": "Number of Opus packets streamed."
+          }
         },
-        "required": ["codec", "stream_id", "target", "sample_rate_hz", "num_channels", "duration_seconds", "packets"],
+        "required": [
+          "codec",
+          "stream_id",
+          "target",
+          "sample_rate_hz",
+          "num_channels",
+          "duration_seconds",
+          "packets"
+        ],
         "additionalProperties": false
       }
     }
@@ -193,7 +298,10 @@
       },
       "TTS_PLUGIN_LOCAL_MODEL_TYPE": {
         "type": "string",
-        "enum": ["kokoro", "piper"],
+        "enum": [
+          "kokoro",
+          "piper"
+        ],
         "description": "Required for sherpa."
       },
       "TTS_PLUGIN_LOCAL_NUM_THREADS": {

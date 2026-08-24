@@ -1,6 +1,6 @@
 {
   "plugin_id": "ping-pong",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "permissions": [],
   "kernel_compatibility_range": {
     "min": "0.1.0",
@@ -8,7 +8,10 @@
   },
   "binary": "ping-pong-rs",
   "events": [],
-  "files": ["ping-pong-rs", "plugin.json"],
+  "files": [
+    "ping-pong-rs",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "ping",
@@ -20,9 +23,13 @@
       "output": {
         "type": "object",
         "properties": {
-          "reply": { "type": "string" }
+          "reply": {
+            "type": "string"
+          }
         },
-        "required": ["reply"],
+        "required": [
+          "reply"
+        ],
         "additionalProperties": false
       }
     }

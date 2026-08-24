@@ -1,14 +1,22 @@
 {
   "plugin_id": "stt",
-  "version": "0.3.0",
-  "permissions": ["network", "secrets", "PERMISSION_AUDIO_STREAM", "PERMISSION_EVENT_PUBLISH"],
+  "version": "0.1.0",
+  "permissions": [
+    "network",
+    "secrets",
+    "PERMISSION_AUDIO_STREAM",
+    "PERMISSION_EVENT_PUBLISH"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "stt",
   "events": [],
-  "files": ["stt", "plugin.json"],
+  "files": [
+    "stt",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "stt_listen_start",
@@ -37,16 +45,28 @@
             "description": "Optional ISO-639-1 hint applied at transcription time."
           }
         },
-        "required": ["sample_rate_hz"],
+        "required": [
+          "sample_rate_hz"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "stream_id": { "type": "integer" },
-          "status": { "type": "string", "enum": ["listening"] }
+          "stream_id": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "listening"
+            ]
+          }
         },
-        "required": ["stream_id", "status"],
+        "required": [
+          "stream_id",
+          "status"
+        ],
         "additionalProperties": false
       }
     },
@@ -66,13 +86,29 @@
       "output": {
         "type": "object",
         "properties": {
-          "stream_id": { "type": "integer" },
-          "text": { "type": "string" },
-          "language": { "type": "string" },
-          "duration_seconds": { "type": "number" },
-          "model": { "type": "string" }
+          "stream_id": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "duration_seconds": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          }
         },
-        "required": ["stream_id", "text", "language", "duration_seconds", "model"],
+        "required": [
+          "stream_id",
+          "text",
+          "language",
+          "duration_seconds",
+          "model"
+        ],
         "additionalProperties": false
       }
     },
@@ -83,7 +119,10 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": ["sherpa", "openai"],
+            "enum": [
+              "sherpa",
+              "openai"
+            ],
             "description": "sherpa = in-process local ONNX; openai = cloud via network. Required."
           },
           "audio_base64": {
@@ -92,7 +131,12 @@
           },
           "format": {
             "type": "string",
-            "enum": ["wav", "pcm", "mp3", "ogg"],
+            "enum": [
+              "wav",
+              "pcm",
+              "mp3",
+              "ogg"
+            ],
             "description": "sherpa: wav (default) | pcm (requires sample_rate_hz + num_channels); openai: wav (default) | mp3 | ogg."
           },
           "sample_rate_hz": {
@@ -140,18 +184,37 @@
             "description": "Optional per-provider model override (default whisper-1; must be one of the ids stt_models lists for openai)."
           }
         },
-        "required": ["provider", "audio_base64"],
+        "required": [
+          "provider",
+          "audio_base64"
+        ],
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "text": { "type": "string" },
-          "language": { "type": "string", "description": "Empty string when unknown." },
-          "duration_seconds": { "type": "number", "description": "0 when it can't be derived from the container format." },
-          "model": { "type": "string", "description": "Provider model id (sherpa:<family> for local)." }
+          "text": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "description": "Empty string when unknown."
+          },
+          "duration_seconds": {
+            "type": "number",
+            "description": "0 when it can't be derived from the container format."
+          },
+          "model": {
+            "type": "string",
+            "description": "Provider model id (sherpa:<family> for local)."
+          }
         },
-        "required": ["text", "language", "duration_seconds", "model"],
+        "required": [
+          "text",
+          "language",
+          "duration_seconds",
+          "model"
+        ],
         "additionalProperties": false
       }
     },
@@ -162,10 +225,15 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": ["sherpa", "openai"]
+            "enum": [
+              "sherpa",
+              "openai"
+            ]
           }
         },
-        "required": ["provider"],
+        "required": [
+          "provider"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -173,10 +241,17 @@
         "items": {
           "type": "object",
           "properties": {
-            "id": { "type": "string" },
-            "name": { "type": "string" }
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
           },
-          "required": ["id", "name"],
+          "required": [
+            "id",
+            "name"
+          ],
           "additionalProperties": false
         }
       }
@@ -196,7 +271,10 @@
       },
       "STT_PLUGIN_LOCAL_MODEL_TYPE": {
         "type": "string",
-        "enum": ["transducer", "whisper"],
+        "enum": [
+          "transducer",
+          "whisper"
+        ],
         "description": "Required for sherpa."
       },
       "STT_PLUGIN_LOCAL_NUM_THREADS": {

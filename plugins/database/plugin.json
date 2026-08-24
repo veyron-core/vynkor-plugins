@@ -1,14 +1,20 @@
 {
   "plugin_id": "database",
-  "version": "0.2.0",
-  "permissions": ["PERMISSION_STORAGE", "event_publish"],
+  "version": "0.1.0",
+  "permissions": [
+    "PERMISSION_STORAGE",
+    "event_publish"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "database",
   "events": [],
-  "files": ["database", "plugin.json"],
+  "files": [
+    "database",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "db_get",
@@ -16,18 +22,29 @@
       "input": {
         "type": "object",
         "properties": {
-          "key": { "type": "string", "description": "KV key in the caller's own namespace." }
+          "key": {
+            "type": "string",
+            "description": "KV key in the caller's own namespace."
+          }
         },
-        "required": ["key"],
+        "required": [
+          "key"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "found": { "type": "boolean" },
-          "value": { "description": "Decoded JSON value when found." }
+          "found": {
+            "type": "boolean"
+          },
+          "value": {
+            "description": "Decoded JSON value when found."
+          }
         },
-        "required": ["found"],
+        "required": [
+          "found"
+        ],
         "additionalProperties": true
       }
     },
@@ -37,19 +54,33 @@
       "input": {
         "type": "object",
         "properties": {
-          "key": { "type": "string" },
-          "value": { "description": "Arbitrary JSON value; stored as JSON text, capped at DATABASE_PLUGIN_MAX_VALUE_BYTES." },
-          "ttl_ms": { "type": "integer", "description": "Expire the key this many ms after set; absent = no expiry." }
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "description": "Arbitrary JSON value; stored as JSON text, capped at DATABASE_PLUGIN_MAX_VALUE_BYTES."
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "description": "Expire the key this many ms after set; absent = no expiry."
+          }
         },
-        "required": ["key", "value"],
+        "required": [
+          "key",
+          "value"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" }
+          "ok": {
+            "type": "boolean"
+          }
         },
-        "required": ["ok"],
+        "required": [
+          "ok"
+        ],
         "additionalProperties": false
       }
     },
@@ -59,17 +90,26 @@
       "input": {
         "type": "object",
         "properties": {
-          "key": { "type": "string" }
+          "key": {
+            "type": "string"
+          }
         },
-        "required": ["key"],
+        "required": [
+          "key"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "deleted": { "type": "boolean", "description": "Whether the key existed and was removed." }
+          "deleted": {
+            "type": "boolean",
+            "description": "Whether the key existed and was removed."
+          }
         },
-        "required": ["deleted"],
+        "required": [
+          "deleted"
+        ],
         "additionalProperties": false
       }
     },
@@ -81,10 +121,14 @@
         "properties": {
           "keys": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "required": ["keys"],
+        "required": [
+          "keys"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -96,7 +140,9 @@
             "description": "key → decoded value; missing keys map to null."
           }
         },
-        "required": ["values"],
+        "required": [
+          "values"
+        ],
         "additionalProperties": false
       }
     },
@@ -106,13 +152,18 @@
       "input": {
         "type": "object",
         "properties": {
-          "sql": { "type": "string", "description": "SQL against the caller's own database only. ATTACH is rejected." },
+          "sql": {
+            "type": "string",
+            "description": "SQL against the caller's own database only. ATTACH is rejected."
+          },
           "params": {
             "type": "array",
             "description": "Positional binds (?1, ?2, ...). Optional."
           }
         },
-        "required": ["sql"],
+        "required": [
+          "sql"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -122,9 +173,14 @@
             "type": "array",
             "description": "Rows for any statement that yields them (including INSERT ... RETURNING)."
           },
-          "rows_affected": { "type": "integer" }
+          "rows_affected": {
+            "type": "integer"
+          }
         },
-        "required": ["rows", "rows_affected"],
+        "required": [
+          "rows",
+          "rows_affected"
+        ],
         "additionalProperties": false
       }
     },
@@ -134,19 +190,34 @@
       "input": {
         "type": "object",
         "properties": {
-          "key": { "type": "string" },
-          "delta": { "type": "integer", "default": 1, "description": "negative decrements" }
+          "key": {
+            "type": "string"
+          },
+          "delta": {
+            "type": "integer",
+            "default": 1,
+            "description": "negative decrements"
+          }
         },
-        "required": ["key"],
+        "required": [
+          "key"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" },
-          "value": { "type": "integer" }
+          "ok": {
+            "type": "boolean"
+          },
+          "value": {
+            "type": "integer"
+          }
         },
-        "required": ["ok", "value"],
+        "required": [
+          "ok",
+          "value"
+        ],
         "additionalProperties": false
       }
     },
@@ -156,7 +227,11 @@
       "input": {
         "type": "object",
         "properties": {
-          "prefix": { "type": "string", "default": "", "description": "only keys starting with this" }
+          "prefix": {
+            "type": "string",
+            "default": "",
+            "description": "only keys starting with this"
+          }
         },
         "additionalProperties": false
       },
@@ -165,10 +240,14 @@
         "properties": {
           "keys": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "required": ["keys"],
+        "required": [
+          "keys"
+        ],
         "additionalProperties": false
       }
     },
@@ -178,19 +257,33 @@
       "input": {
         "type": "object",
         "properties": {
-          "key": { "type": "string" },
-          "value": { "description": "Arbitrary JSON value appended to the array stored at key." }
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "description": "Arbitrary JSON value appended to the array stored at key."
+          }
         },
-        "required": ["key", "value"],
+        "required": [
+          "key",
+          "value"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" },
-          "length": { "type": "integer" }
+          "ok": {
+            "type": "boolean"
+          },
+          "length": {
+            "type": "integer"
+          }
         },
-        "required": ["ok", "length"],
+        "required": [
+          "ok",
+          "length"
+        ],
         "additionalProperties": false
       }
     },
@@ -200,20 +293,38 @@
       "input": {
         "type": "object",
         "properties": {
-          "key": { "type": "string" },
-          "path": { "type": "string", "description": "SQLite JSON path, e.g. $.a.b or $[0]" },
-          "value": { "description": "Arbitrary JSON value to set at the path." }
+          "key": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "description": "SQLite JSON path, e.g. $.a.b or $[0]"
+          },
+          "value": {
+            "description": "Arbitrary JSON value to set at the path."
+          }
         },
-        "required": ["key", "path", "value"],
+        "required": [
+          "key",
+          "path",
+          "value"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" },
-          "value": { "description": "The full updated JSON value." }
+          "ok": {
+            "type": "boolean"
+          },
+          "value": {
+            "description": "The full updated JSON value."
+          }
         },
-        "required": ["ok", "value"],
+        "required": [
+          "ok",
+          "value"
+        ],
         "additionalProperties": false
       }
     }
@@ -257,7 +368,9 @@
         "description": "Hard per-caller disk quota enforced via PRAGMA max_page_count. 0 disables."
       }
     },
-    "required": ["DATABASE_PLUGIN_DATA_DIR"],
+    "required": [
+      "DATABASE_PLUGIN_DATA_DIR"
+    ],
     "additionalProperties": true
   }
 }

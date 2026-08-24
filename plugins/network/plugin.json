@@ -1,14 +1,20 @@
 {
   "plugin_id": "network",
-  "version": "0.4.0",
-  "permissions": ["network", "event_publish"],
+  "version": "0.1.0",
+  "permissions": [
+    "network",
+    "event_publish"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "network",
   "events": [],
-  "files": ["network", "plugin.json"],
+  "files": [
+    "network",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "http_request",
@@ -16,15 +22,28 @@
       "input": {
         "type": "object",
         "properties": {
-          "url": { "type": "string", "description": "Target URL (http/https). SSRF-guarded: loopback, RFC1918, link-local, multicast, broadcast, and cloud metadata 169.254.169.254 are blocked by default." },
+          "url": {
+            "type": "string",
+            "description": "Target URL (http/https). SSRF-guarded: loopback, RFC1918, link-local, multicast, broadcast, and cloud metadata 169.254.169.254 are blocked by default."
+          },
           "method": {
             "type": "string",
-            "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "DELETE",
+              "PATCH",
+              "HEAD",
+              "OPTIONS"
+            ],
             "default": "GET"
           },
           "headers": {
             "type": "object",
-            "additionalProperties": { "type": "string" },
+            "additionalProperties": {
+              "type": "string"
+            },
             "description": "Request headers, e.g. {\"Content-Type\": \"application/json\"}."
           },
           "body": {
@@ -40,13 +59,30 @@
             "items": {
               "type": "object",
               "properties": {
-                "name": { "type": "string", "description": "Part field name, max 256 bytes." },
-                "value": { "type": "string", "description": "Text part value. Mutually exclusive with file_base64." },
-                "file_base64": { "type": "string", "description": "Base64-encoded binary part content. Mutually exclusive with value." },
-                "filename": { "type": "string", "description": "filename in Content-Disposition (file uploads), max 1024 bytes." },
-                "content_type": { "type": "string", "description": "Part Content-Type. Default text/plain; charset=utf-8 for value parts, application/octet-stream for file parts." }
+                "name": {
+                  "type": "string",
+                  "description": "Part field name, max 256 bytes."
+                },
+                "value": {
+                  "type": "string",
+                  "description": "Text part value. Mutually exclusive with file_base64."
+                },
+                "file_base64": {
+                  "type": "string",
+                  "description": "Base64-encoded binary part content. Mutually exclusive with value."
+                },
+                "filename": {
+                  "type": "string",
+                  "description": "filename in Content-Disposition (file uploads), max 1024 bytes."
+                },
+                "content_type": {
+                  "type": "string",
+                  "description": "Part Content-Type. Default text/plain; charset=utf-8 for value parts, application/octet-stream for file parts."
+                }
               },
-              "required": ["name"],
+              "required": [
+                "name"
+              ],
               "additionalProperties": false
             },
             "description": "multipart/form-data body parts. Mutually exclusive with body and body_base64. The plugin builds the boundary and overrides the Content-Type header. Total decoded body capped at 25 MiB."
@@ -93,16 +129,23 @@
             "description": "Redirect cap when follow_redirects is true. Every hop still resolves through the SSRF-guarded resolver."
           }
         },
-        "required": ["url"],
+        "required": [
+          "url"
+        ],
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "integer", "description": "Final HTTP status, or 0 when no response was obtained (SSRF block, transport failure)." },
+          "status": {
+            "type": "integer",
+            "description": "Final HTTP status, or 0 when no response was obtained (SSRF block, transport failure)."
+          },
           "headers": {
             "type": "object",
-            "additionalProperties": { "type": "string" }
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "body": {
             "type": "string",
@@ -110,16 +153,27 @@
           },
           "body_encoding": {
             "type": "string",
-            "enum": ["utf8", "base64"],
+            "enum": [
+              "utf8",
+              "base64"
+            ],
             "description": "How to interpret body."
           },
           "cache": {
             "type": "string",
-            "enum": ["hit", "miss"],
+            "enum": [
+              "hit",
+              "miss"
+            ],
             "description": "Present only when cache_ttl_ms was requested: hit = served from the per-caller cache without touching the network, miss = fetched from the origin."
           }
         },
-        "required": ["status", "headers", "body", "body_encoding"],
+        "required": [
+          "status",
+          "headers",
+          "body",
+          "body_encoding"
+        ],
         "additionalProperties": false
       }
     },
@@ -136,11 +190,21 @@
           "totals": {
             "type": "object",
             "properties": {
-              "requests": { "type": "integer" },
-              "errors": { "type": "integer" },
-              "avg_latency_ms": { "type": "integer" }
+              "requests": {
+                "type": "integer"
+              },
+              "errors": {
+                "type": "integer"
+              },
+              "avg_latency_ms": {
+                "type": "integer"
+              }
             },
-            "required": ["requests", "errors", "avg_latency_ms"],
+            "required": [
+              "requests",
+              "errors",
+              "avg_latency_ms"
+            ],
             "additionalProperties": false
           },
           "per_caller": {
@@ -148,16 +212,29 @@
             "additionalProperties": {
               "type": "object",
               "properties": {
-                "requests": { "type": "integer" },
-                "errors": { "type": "integer" },
-                "avg_latency_ms": { "type": "integer" }
+                "requests": {
+                  "type": "integer"
+                },
+                "errors": {
+                  "type": "integer"
+                },
+                "avg_latency_ms": {
+                  "type": "integer"
+                }
               },
-              "required": ["requests", "errors", "avg_latency_ms"],
+              "required": [
+                "requests",
+                "errors",
+                "avg_latency_ms"
+              ],
               "additionalProperties": false
             }
           }
         },
-        "required": ["totals", "per_caller"],
+        "required": [
+          "totals",
+          "per_caller"
+        ],
         "additionalProperties": false
       }
     }

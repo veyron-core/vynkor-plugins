@@ -1,14 +1,20 @@
 {
   "plugin_id": "daemon",
-  "version": "0.2.0",
-  "permissions": ["PERMISSION_AUDIO", "PERMISSION_EVENT_PUBLISH"],
+  "version": "0.1.0",
+  "permissions": [
+    "PERMISSION_AUDIO",
+    "PERMISSION_EVENT_PUBLISH"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "daemon",
   "events": [],
-  "files": ["daemon", "plugin.json"],
+  "files": [
+    "daemon",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "daemon_enable",
@@ -20,9 +26,14 @@
       "output": {
         "type": "object",
         "properties": {
-          "enabled": { "type": "boolean", "const": true }
+          "enabled": {
+            "type": "boolean",
+            "const": true
+          }
         },
-        "required": ["enabled"],
+        "required": [
+          "enabled"
+        ],
         "additionalProperties": false
       }
     },
@@ -36,9 +47,14 @@
       "output": {
         "type": "object",
         "properties": {
-          "enabled": { "type": "boolean", "const": false }
+          "enabled": {
+            "type": "boolean",
+            "const": false
+          }
         },
-        "required": ["enabled"],
+        "required": [
+          "enabled"
+        ],
         "additionalProperties": false
       }
     },
@@ -52,26 +68,54 @@
       "output": {
         "type": "object",
         "properties": {
-          "enabled": { "type": "boolean", "description": "Whether the background listen loop is on." },
-          "busy": { "type": "boolean", "description": "True while a voice turn is running." },
-          "turns_completed": { "type": "integer", "minimum": 0, "description": "Voice turns finished since process start." },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the background listen loop is on."
+          },
+          "busy": {
+            "type": "boolean",
+            "description": "True while a voice turn is running."
+          },
+          "turns_completed": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Voice turns finished since process start."
+          },
           "last_turn": {
             "oneOf": [
-              { "type": "null" },
+              {
+                "type": "null"
+              },
               {
                 "type": "object",
                 "properties": {
-                  "status": { "type": "string" },
-                  "transcript": { "type": "string" },
-                  "answer": { "type": ["string", "null"] },
-                  "duration_ms": { "type": "integer" }
+                  "status": {
+                    "type": "string"
+                  },
+                  "transcript": {
+                    "type": "string"
+                  },
+                  "answer": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "duration_ms": {
+                    "type": "integer"
+                  }
                 }
               }
             ],
             "description": "Result of the most recent voice turn, or null before the first one."
           }
         },
-        "required": ["enabled", "busy", "turns_completed", "last_turn"],
+        "required": [
+          "enabled",
+          "busy",
+          "turns_completed",
+          "last_turn"
+        ],
         "additionalProperties": false
       }
     },
@@ -80,23 +124,73 @@
       "input": {
         "type": "object",
         "properties": {
-          "text": { "type": "string", "minLength": 1, "maxLength": 4000, "description": "Skip the mic/stt listen stage and use this text as the prompt instead." }
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "Skip the mic/stt listen stage and use this text as the prompt instead."
+          }
         },
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string", "enum": ["answered", "silent", "error"], "description": "answered = agent replied and the answer was spoken; silent = empty transcript; error = a stage failed (see error)." },
-          "transcript": { "type": "string", "description": "The prompt this turn used (stt transcript, or the text param when given)." },
-          "answer": { "type": ["string", "null"], "description": "Agent final_answer when status is answered." },
-          "goal_id": { "type": ["string", "null"] },
-          "goal_status": { "type": ["string", "null"] },
-          "error": { "type": ["string", "null"], "description": "Stage failure detail when status is error." },
-          "spoken": { "type": "boolean", "description": "True when audio reached sound_play." },
-          "duration_ms": { "type": "integer", "minimum": 0 }
+          "status": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "silent",
+              "error"
+            ],
+            "description": "answered = agent replied and the answer was spoken; silent = empty transcript; error = a stage failed (see error)."
+          },
+          "transcript": {
+            "type": "string",
+            "description": "The prompt this turn used (stt transcript, or the text param when given)."
+          },
+          "answer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent final_answer when status is answered."
+          },
+          "goal_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "goal_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stage failure detail when status is error."
+          },
+          "spoken": {
+            "type": "boolean",
+            "description": "True when audio reached sound_play."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
-        "required": ["status", "transcript", "answer", "spoken", "duration_ms"],
+        "required": [
+          "status",
+          "transcript",
+          "answer",
+          "spoken",
+          "duration_ms"
+        ],
         "additionalProperties": false
       }
     },
@@ -105,20 +199,44 @@
       "input": {
         "type": "object",
         "properties": {
-          "text": { "type": "string", "minLength": 1, "maxLength": 4000, "description": "Text to synthesize and play through tts + sound." }
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "Text to synthesize and play through tts + sound."
+          }
         },
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "spoken": { "type": "boolean", "const": true },
-          "clip_id": { "type": "string", "description": "sound_play clip handle (for sound_stop)." },
-          "player": { "type": "string", "description": "Host player binary sound spawned." },
-          "format": { "type": "string", "description": "Audio format synthesized by tts." }
+          "spoken": {
+            "type": "boolean",
+            "const": true
+          },
+          "clip_id": {
+            "type": "string",
+            "description": "sound_play clip handle (for sound_stop)."
+          },
+          "player": {
+            "type": "string",
+            "description": "Host player binary sound spawned."
+          },
+          "format": {
+            "type": "string",
+            "description": "Audio format synthesized by tts."
+          }
         },
-        "required": ["spoken", "clip_id", "player", "format"],
+        "required": [
+          "spoken",
+          "clip_id",
+          "player",
+          "format"
+        ],
         "additionalProperties": false
       }
     },
@@ -127,20 +245,51 @@
       "input": {
         "type": "object",
         "properties": {
-          "prompt": { "type": "string", "minLength": 1, "maxLength": 4000, "description": "Prompt for the agent's goal loop; the answer is spoken aloud and returned." }
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "Prompt for the agent's goal loop; the answer is spoken aloud and returned."
+          }
         },
-        "required": ["prompt"],
+        "required": [
+          "prompt"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "answer": { "type": ["string", "null"], "description": "Agent final_answer (null unless goal_status is completed)." },
-          "goal_id": { "type": "string" },
-          "goal_status": { "type": "string", "enum": ["completed", "needs_confirmation", "declined", "max_steps_reached", "error"] },
-          "spoken": { "type": "boolean" }
+          "answer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent final_answer (null unless goal_status is completed)."
+          },
+          "goal_id": {
+            "type": "string"
+          },
+          "goal_status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "needs_confirmation",
+              "declined",
+              "max_steps_reached",
+              "error"
+            ]
+          },
+          "spoken": {
+            "type": "boolean"
+          }
         },
-        "required": ["answer", "goal_id", "goal_status", "spoken"],
+        "required": [
+          "answer",
+          "goal_id",
+          "goal_status",
+          "spoken"
+        ],
         "additionalProperties": false
       }
     }
@@ -184,7 +333,11 @@
       },
       "DAEMON_PLUGIN_TTS_PROVIDER": {
         "type": "string",
-        "enum": ["sherpa", "openai", "elevenlabs"],
+        "enum": [
+          "sherpa",
+          "openai",
+          "elevenlabs"
+        ],
         "description": "tts_synthesize provider (default sherpa — fully offline)."
       },
       "DAEMON_PLUGIN_TTS_VOICE": {
@@ -194,7 +347,15 @@
       },
       "DAEMON_PLUGIN_TTS_FORMAT": {
         "type": "string",
-        "enum": ["wav", "mp3", "pcm", "opus", "aac", "flac", "ulaw"],
+        "enum": [
+          "wav",
+          "mp3",
+          "pcm",
+          "opus",
+          "aac",
+          "flac",
+          "ulaw"
+        ],
         "description": "Synthesis format handed to sound_play (default wav)."
       },
       "DAEMON_PLUGIN_MAX_STEPS": {

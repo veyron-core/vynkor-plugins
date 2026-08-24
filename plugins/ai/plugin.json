@@ -1,14 +1,20 @@
 {
   "plugin_id": "ai",
-  "version": "0.3.0",
-  "permissions": ["network", "secrets"],
+  "version": "0.1.0",
+  "permissions": [
+    "network",
+    "secrets"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "ai",
   "events": [],
-  "files": ["ai", "plugin.json"],
+  "files": [
+    "ai",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "chat_completion",
@@ -21,7 +27,10 @@
           },
           "provider": {
             "type": "string",
-            "enum": ["anthropic", "openai"],
+            "enum": [
+              "anthropic",
+              "openai"
+            ],
             "description": "Provider adapter. Required when agent_id is not set (unless the model id is in the ai database)."
           },
           "base_url": {
@@ -43,10 +52,22 @@
             "items": {
               "type": "object",
               "properties": {
-                "role": { "type": "string", "enum": ["user", "assistant", "system"] },
-                "content": { "type": "string" }
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "assistant",
+                    "system"
+                  ]
+                },
+                "content": {
+                  "type": "string"
+                }
               },
-              "required": ["role", "content"],
+              "required": [
+                "role",
+                "content"
+              ],
               "additionalProperties": false
             },
             "description": "Chat messages. Required, non-empty."
@@ -64,24 +85,38 @@
             "default": 30000
           }
         },
-        "required": ["messages"],
+        "required": [
+          "messages"
+        ],
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "content": { "type": "string" },
-          "stop_reason": { "type": "string" },
+          "content": {
+            "type": "string"
+          },
+          "stop_reason": {
+            "type": "string"
+          },
           "usage": {
             "type": "object",
             "properties": {
-              "input_tokens": { "type": "integer" },
-              "output_tokens": { "type": "integer" }
+              "input_tokens": {
+                "type": "integer"
+              },
+              "output_tokens": {
+                "type": "integer"
+              }
             },
             "additionalProperties": true
           }
         },
-        "required": ["content", "stop_reason", "usage"],
+        "required": [
+          "content",
+          "stop_reason",
+          "usage"
+        ],
         "additionalProperties": false
       }
     },
@@ -92,7 +127,9 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": ["openai"],
+            "enum": [
+              "openai"
+            ],
             "description": "Provider adapter. Currently only 'openai' (covers OpenAI, Voyage, Ollama, any OpenAI-compatible embeddings endpoint)."
           },
           "base_url": {
@@ -125,7 +162,9 @@
             "default": 30000
           }
         },
-        "required": ["input"],
+        "required": [
+          "input"
+        ],
         "additionalProperties": true
       },
       "output": {
@@ -133,20 +172,36 @@
         "properties": {
           "embedding": {
             "type": "array",
-            "items": { "type": "number" },
+            "items": {
+              "type": "number"
+            },
             "description": "L2-normalizable embedding vector."
           },
-          "dim": { "type": "integer", "description": "Dimension of the embedding." },
-          "model": { "type": "string" },
+          "dim": {
+            "type": "integer",
+            "description": "Dimension of the embedding."
+          },
+          "model": {
+            "type": "string"
+          },
           "usage": {
             "type": "object",
             "properties": {
-              "input_tokens": { "type": "integer" },
-              "output_tokens": { "type": "integer" }
+              "input_tokens": {
+                "type": "integer"
+              },
+              "output_tokens": {
+                "type": "integer"
+              }
             }
           }
         },
-        "required": ["embedding", "dim", "model", "usage"],
+        "required": [
+          "embedding",
+          "dim",
+          "model",
+          "usage"
+        ],
         "additionalProperties": false
       }
     },
@@ -161,13 +216,30 @@
         "items": {
           "type": "object",
           "properties": {
-            "id": { "type": "string" },
-            "provider": { "type": "string" },
-            "base_url": { "type": "string" },
-            "api_key_env": { "type": "string" },
-            "is_default": { "type": "boolean" },
-            "discovered_at": { "type": ["integer", "null"] },
-            "last_seen": { "type": "integer" }
+            "id": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": "string"
+            },
+            "api_key_env": {
+              "type": "string"
+            },
+            "is_default": {
+              "type": "boolean"
+            },
+            "discovered_at": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "last_seen": {
+              "type": "integer"
+            }
           }
         }
       }
@@ -183,13 +255,27 @@
         "items": {
           "type": "object",
           "properties": {
-            "id": { "type": "string" },
-            "name": { "type": "string" },
-            "model_id": { "type": "string" },
-            "system_prompt": { "type": "string" },
-            "goal": { "type": "string" },
-            "description": { "type": "string" },
-            "is_default": { "type": "boolean" }
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "system_prompt": {
+              "type": "string"
+            },
+            "goal": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "is_default": {
+              "type": "boolean"
+            }
           }
         }
       }
@@ -203,9 +289,18 @@
       "output": {
         "type": "object",
         "properties": {
-          "discovered": { "type": "integer" },
-          "updated": { "type": "integer" },
-          "errors": { "type": "array", "items": { "type": "string" } }
+          "discovered": {
+            "type": "integer"
+          },
+          "updated": {
+            "type": "integer"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -221,13 +316,23 @@
           "totals": {
             "type": "object",
             "properties": {
-              "requests": { "type": "integer" },
-              "input_tokens": { "type": "integer" },
-              "output_tokens": { "type": "integer" }
+              "requests": {
+                "type": "integer"
+              },
+              "input_tokens": {
+                "type": "integer"
+              },
+              "output_tokens": {
+                "type": "integer"
+              }
             }
           },
-          "by_model": { "type": "array" },
-          "by_agent": { "type": "array" }
+          "by_model": {
+            "type": "array"
+          },
+          "by_agent": {
+            "type": "array"
+          }
         }
       }
     }
@@ -253,7 +358,9 @@
         "description": "Optional JSON array of sources whose model lists are pulled automatically: [{\"provider\":\"ollama|openai\",\"base_url\":\"...\",\"api_key_env\":\"...\"}]. ollama: GET /api/tags; openai: GET /models."
       }
     },
-    "required": ["AI_PLUGIN_ALLOWED_KEY_ENVS"],
+    "required": [
+      "AI_PLUGIN_ALLOWED_KEY_ENVS"
+    ],
     "additionalProperties": true
   }
 }

@@ -1,14 +1,19 @@
 {
   "plugin_id": "notify",
-  "version": "0.2.0",
-  "permissions": ["notify"],
+  "version": "0.1.0",
+  "permissions": [
+    "notify"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "notify",
   "events": [],
-  "files": ["notify", "plugin.json"],
+  "files": [
+    "notify",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "notify_send",
@@ -18,7 +23,11 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": ["notify-send", "wall", "espeak"],
+            "enum": [
+              "notify-send",
+              "wall",
+              "espeak"
+            ],
             "default": "notify-send",
             "description": "Delivery provider. notify-send: libnotify desktop notification; wall: broadcast to all logged-in terminals; espeak: spoken alert via espeak-ng (falls back to espeak). Ignored when silent is true."
           },
@@ -32,7 +41,11 @@
           },
           "urgency": {
             "type": "string",
-            "enum": ["low", "normal", "critical"],
+            "enum": [
+              "low",
+              "normal",
+              "critical"
+            ],
             "description": "notify-send urgency level. Optional; only sent to notify-send."
           },
           "timeout_ms": {
@@ -56,7 +69,9 @@
             "description": "Also synthesize through the tts plugin and play the audio on the host. Best-effort: a failed озвучка never fails the delivery."
           }
         },
-        "required": ["message"],
+        "required": [
+          "message"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -70,8 +85,12 @@
             "type": "boolean",
             "description": "True when the notification was stored without delivery (silent path)."
           },
-          "silent": { "type": "boolean" },
-          "delivered": { "type": "boolean" },
+          "silent": {
+            "type": "boolean"
+          },
+          "delivered": {
+            "type": "boolean"
+          },
           "provider": {
             "type": "string",
             "description": "Canonical provider id the message was delivered through."
@@ -93,7 +112,10 @@
             "description": "tts озвучка failure message; empty when spoken is true or speak was not requested."
           }
         },
-        "required": ["id", "delivered"],
+        "required": [
+          "id",
+          "delivered"
+        ],
         "additionalProperties": false
       }
     },
@@ -109,12 +131,29 @@
         "items": {
           "type": "object",
           "properties": {
-            "id": { "type": "string", "description": "Canonical provider id (notify-send, wall, espeak)." },
-            "name": { "type": "string", "description": "Display name (same as id)." },
-            "available": { "type": "boolean", "description": "True when enabled by NOTIFY_PLUGIN_ENABLED_PROVIDERS and its binary is installed." },
-            "description": { "type": "string", "description": "One-line description of what the provider does." }
+            "id": {
+              "type": "string",
+              "description": "Canonical provider id (notify-send, wall, espeak)."
+            },
+            "name": {
+              "type": "string",
+              "description": "Display name (same as id)."
+            },
+            "available": {
+              "type": "boolean",
+              "description": "True when enabled by NOTIFY_PLUGIN_ENABLED_PROVIDERS and its binary is installed."
+            },
+            "description": {
+              "type": "string",
+              "description": "One-line description of what the provider does."
+            }
           },
-          "required": ["id", "name", "available", "description"],
+          "required": [
+            "id",
+            "name",
+            "available",
+            "description"
+          ],
           "additionalProperties": false
         }
       }
@@ -142,22 +181,52 @@
             "items": {
               "type": "object",
               "properties": {
-                "id": { "type": "string" },
-                "created_at_ms": { "type": "integer" },
-                "title": { "type": "string" },
-                "message": { "type": "string" },
-                "provider": { "type": "string" },
-                "delivered": { "type": "boolean" },
-                "silent": { "type": "boolean" },
-                "spoken": { "type": "boolean" },
-                "read": { "type": "boolean" }
+                "id": {
+                  "type": "string"
+                },
+                "created_at_ms": {
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "delivered": {
+                  "type": "boolean"
+                },
+                "silent": {
+                  "type": "boolean"
+                },
+                "spoken": {
+                  "type": "boolean"
+                },
+                "read": {
+                  "type": "boolean"
+                }
               },
-              "required": ["id", "created_at_ms", "title", "message", "provider", "delivered", "silent", "spoken", "read"],
+              "required": [
+                "id",
+                "created_at_ms",
+                "title",
+                "message",
+                "provider",
+                "delivered",
+                "silent",
+                "spoken",
+                "read"
+              ],
               "additionalProperties": false
             }
           }
         },
-        "required": ["notifications"],
+        "required": [
+          "notifications"
+        ],
         "additionalProperties": false
       }
     },
@@ -167,17 +236,27 @@
       "input": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "description": "Inbox entry id from notify_list or a notify_send response." }
+          "id": {
+            "type": "string",
+            "description": "Inbox entry id from notify_list or a notify_send response."
+          }
         },
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "updated": { "type": "boolean", "description": "True when the entry existed and was unread." }
+          "updated": {
+            "type": "boolean",
+            "description": "True when the entry existed and was unread."
+          }
         },
-        "required": ["updated"],
+        "required": [
+          "updated"
+        ],
         "additionalProperties": false
       }
     },
@@ -187,17 +266,27 @@
       "input": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "description": "Inbox entry id from notify_list or a notify_send response." }
+          "id": {
+            "type": "string",
+            "description": "Inbox entry id from notify_list or a notify_send response."
+          }
         },
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "deleted": { "type": "boolean", "description": "True when the entry existed." }
+          "deleted": {
+            "type": "boolean",
+            "description": "True when the entry existed."
+          }
         },
-        "required": ["deleted"],
+        "required": [
+          "deleted"
+        ],
         "additionalProperties": false
       }
     }
