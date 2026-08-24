@@ -8,5 +8,35 @@
   },
   "binary": "ping-pong-rs",
   "events": [],
-  "actions": ["ping"]
+  "files": [
+    "ping-pong-rs",
+    "plugin.json"
+  ],
+  "actions": [
+    {
+      "name": "ping",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "reply": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reply"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "config_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {}
+  }
 }

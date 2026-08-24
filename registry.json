@@ -1,9 +1,28 @@
 {
   "meta": {
     "apiVersion": 2,
-    "lastUpdated": "2026-08-22"
+    "lastUpdated": "2026-08-24"
   },
   "revoked": [],
+  "agent": {
+    "name": "Agent",
+    "description": "Multi-step goal loop for vynkor plugins: takes a natural-language goal, plans and acts by calling other plugins' kernel-routed actions as tools (through `ai`'s `chat_completion`), and persists every goal as a JSON document in its own `database` namespace.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/agent",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/agent/versions/0.1.0/agent-0.1.0.zip",
+        "sha256": "ff7684e2fcef427e8a3ee45c37bb4975b3976f59dd9f4ef245d1c4ddca57044c",
+        "signature": "f0d2512e6298e96fa8f968877c33fee256c3d573145a75170ca2c9e26e9a7bbbf284f9051a5476e592988cef5dcb61823011946aa241b2b1aff6f764ef596204",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
   "ai": {
     "name": "AI",
     "description": "Provider-agnostic LLM chat completion (chat_completion) for anthropic + openai-compatible providers, routed through the network plugin; declares no permissions itself.",
@@ -12,12 +31,69 @@
       "llm"
     ],
     "status": "stable",
-    "source_url": "https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/ai",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/ai",
     "versions": {
       "0.1.0": {
-        "archive_url": "https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/ai/versions/0.1.0/ai-0.1.0.zip",
-        "sha256": "e485e50068bae0714ec167d05d31b50e03b4b0d0c25c09118c9a4ffa4406f10e",
-        "signature": "c099cf30095be49a0ad8cf5854ec78fff2927c2be9853ecb5bbae4e2321e48cf00667200fd2f6e08a9597061a5f94bf09a3652d2290744ff8b149d96b30da00e",
+        "archive_url": "dist/ai/versions/0.1.0/ai-0.1.0.zip",
+        "sha256": "8b6c618519429a1a3d21bdd832065696e7040b1e56883fc8bb5d5a75e8ddd8a4",
+        "signature": "53e3138072a67c8567f78e37c5698d8b306c35201bf0040bcbafdf95c95d86d128e61ed870f6aed22a5a89eb00cf1f799f02bea6526d730cc890bb84a5b9c608",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "calendar": {
+    "name": "Calendar",
+    "description": "Event CRUD plus reminders as a thin schema layer over the [`database`](../database/) plugin. Every event is one JSON document stored under `event:<id>` in this plugin's own private `database` namespace; ids come from an atomic counter (`db_incr` on `meta:next_id`). No local state \u2014 restart-safe by construction.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/calendar",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/calendar/versions/0.1.0/calendar-0.1.0.zip",
+        "sha256": "6ebd6a99bed0a8f172364fa48a036614b1f75dae7dc28f7d5e26a7c1f30509e2",
+        "signature": "74595dbe70e9e137e43ed908e701b3d79844f214b7ad9b11bf8dd8d37d871c6634c73804e39cc167be69faba67778ee8ce2bd4fabe76d24ce36c759a2928b508",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "clipboard": {
+    "name": "Clipboard",
+    "description": "Read/write the system clipboard for vynkor plugins. v1 is text-only and local: it spawns host clipboard binaries directly with argv \u2014 never a shell \u2014 so clipboard content cannot inject commands (same delivery model as `notify`). Declares `PERMISSION_CLIPBOARD` (proto v1.4).",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/clipboard",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/clipboard/versions/0.1.0/clipboard-0.1.0.zip",
+        "sha256": "b453c04036a547bc28eefb10d11c38bd71ea37dfd3f7db30c5a965dd4a69412b",
+        "signature": "ff404201b516a2351ebded51a858a68c3e8e514bf15d73c113bbf6af746758a8c6238c6d418f620999bf391990ae3ad483ca67dd6a299e32896332153771e608",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "daemon": {
+    "name": "Daemon",
+    "description": "The headless always-on voice client for the [`agent`](../agent/) plugin: mic \u2192 stt \u2192 agent \u2192 tts \u2192 sound, with no business logic of its own (root `ROADMAP.md`: \"thin clients to `agent` \u2014 no business logic of their own, just UI surface over the same kernel API\"; the daemon's surface is the absence of one \u2014 no window, no browser, just a listen loop and a speaker).",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/daemon",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/daemon/versions/0.1.0/daemon-0.1.0.zip",
+        "sha256": "19b90c7a247c62595d514e3afbaded519b55168a5838d63bb84a83e8d25bb53b",
+        "signature": "c8fbb415ea27737b35437ef003834b9b09ff5e68deb5a7f37f203f81b71d9bf1f112fa4adb426c244b9c68c42c98902982f26933f4650a27d6d3575b9b5f0701",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -32,12 +108,107 @@
       "database"
     ],
     "status": "stable",
-    "source_url": "https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/database",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/database",
     "versions": {
       "0.1.0": {
-        "archive_url": "https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/database/versions/0.1.0/database-0.1.0.zip",
-        "sha256": "55550f4d7c51dfbade5db4161920a9802347b78bf3b875163f20abfc9aede756",
-        "signature": "212640e0b05a48375a4386992ab366a4722894e4e041357cdb061bd26f4d0f973cd34355a2ad087d0cd5a5fc8cefe6445347aa9b3e31dd47f19927985138a209",
+        "archive_url": "dist/database/versions/0.1.0/database-0.1.0.zip",
+        "sha256": "68156de4319dc88bb5eb8a312371d9ce33f92f31941a51337c1fdade5c75cc8f",
+        "signature": "42f2a3fdee1e16284b7fcf67bfb4d118340b006a6b2f84e3472ac98de2b1cd9f6cc0e724afdd21d8058843e618a59023413e2c99107dc9a40a2148f5e9d4bc02",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "email": {
+    "name": "Email",
+    "description": "SMTP email sending + IMAP listing for vynkor plugins. Exposes two actions, `email_send` (SMTP via `lettre`) and `email_list` (IMAP listing, stub mode in `0.1.0`). Both resolve their password vault-first (via the `secrets` plugin's `secret_get` action). See `ROADMAP.md` for the design rationale.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/email",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/email/versions/0.1.0/email-0.1.0.zip",
+        "sha256": "5106702753f8c901f09564a4fdc155c67a472356f901f99b3db51ed38f742d46",
+        "signature": "940e4403f09fc986d0d2f0a3f7be8b5e6b025739b2e505bd13b629bfbff14dfa7f65bbd96b5f11bd7cc0b6a779d3f7acbf8209db740707b26411a8c3678fcf06",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "filesystem": {
+    "name": "Filesystem",
+    "description": "Sandboxed local file browse/read/write for vynkor plugins. Three actions: `fs_list` (read-only directory browse), `fs_read` (windowed file read), and `fs_write` (full-file create/overwrite). No exec, no shell, no delete/rename \u2014 see `ROADMAP.md` non-goals.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/filesystem",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/filesystem/versions/0.1.0/filesystem-0.1.0.zip",
+        "sha256": "22b0d01a8a770bb073ee38b248735b1b75be8a812ef3d79267d6afe772ac10f5",
+        "signature": "ac94c0e2fe02a6025c17d3660b8ea65e29e75682acbe6c5f31e77472bd5fc21056fb2a8141ecb491a65f3cc62f8691b48fae63cf6d0626633dacdeded1f03606",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "gated-write": {
+    "name": "Gated Write",
+    "description": "Reference high-risk plugin demonstrating the **D-09 confirmation gate** from the [Veyron Rust SDK](https://github.com/veyron-core/vynkor-sdk-rust).",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/gated-write",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/gated-write/versions/0.1.0/gated-write-0.1.0.zip",
+        "sha256": "a74f1f3fdf851887c92c546d1e7b2210ae7ba9c5e27779f73cc7e07647a28b38",
+        "signature": "a4664d10723c065c8cd1ff9f8f8e6e5d958c9b2dba7b6c4038e3594fc985e659174a53475b86c0063bf7c89a9f19803d30a3be9e97582f3b1b4ad2cd112ca00f",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "hotkey": {
+    "name": "Hotkey",
+    "description": "Global key combos \u2192 kernel events. Hold a key, talk, release \u2014 the [`daemon`](../daemon/) turns that into a voice turn. The same events drive anything else an operator wants wired to the keyboard (mute toggles, \"stop talking\", scene switches).",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/hotkey",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/hotkey/versions/0.1.0/hotkey-0.1.0.zip",
+        "sha256": "4714edaf6ee2f403d4322e879bc47e23005c93e73b45fd2932a9aae46516bdde",
+        "signature": "11879718dd1a32619470664e8fd29b840c0c4859cfc5d4576eae83c901fb58ed75aba30dc13b7c7a375fef94027627abc5c8a4cfccf7516e9c04368023e31701",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "launcher": {
+    "name": "Launcher",
+    "description": "Launch apps and Steam games by name for vynkor plugins. Six providers:",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/launcher",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/launcher/versions/0.1.0/launcher-0.1.0.zip",
+        "sha256": "4a6d96aa82962e9a5e53480ff7585bc9fdc38a5203e53eee9abfece27a380504",
+        "signature": "8e1f27dcaa5dcfb26b2ad2b76dbf3deb23e02be5d8ee2bdd4b38bdf851390628f418f8bbd0ac951c0727d632252a277e5a3820340f25c13ac93c4490c1defb00",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -53,19 +224,31 @@
       "playback"
     ],
     "status": "stable",
-    "source_url": "https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/media",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/media",
     "versions": {
       "0.1.0": {
-        "archive_url": "https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/media/versions/0.1.0/media-0.1.0.zip",
-        "sha256": "3643d9e4d6c03cb9846726c00880d30eaf829b3832bf1747e631ea2505861d5c",
-        "signature": "a8207f20edb832a080c658b24e04e982a21bb96aa3224e4220960cbab9f0178bfccda1449b2155ed64b06b4541ab967d1682ddd86ac812dea8b8d42fe1a8110c",
+        "archive_url": "dist/media/versions/0.1.0/media-0.1.0.zip",
+        "sha256": "cb01070d943617a2f5e288405b29d29dd9624feb818d47d71628d7698db8f111",
+        "signature": "7b02cacc10a77a42e5d6ef252aff88b3d31afe7f1d8ecd386a14dc4a0398ac07c05eaff55e70bec88557ed42a95b8c1d544b65bd950be43579179afe0d8e090f",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
-      },
-      "0.0.2": {
-        "archive_url": "https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/media/versions/0.0.2/media-0.0.2.zip",
-        "sha256": "b33672be08228bb0ede91a38c2b268cf2df693e67cf1ad35c14f896bf081ac63",
-        "signature": "023e6a57bfefef22220fe497933d04b76d90d06f9c91549eb202d4d19be304f03fedd7f6f2d47d7e3fe796d08f757141f627166b990b28e18be0162981454e06",
+      }
+    }
+  },
+  "mic": {
+    "name": "Mic",
+    "description": "Microphone capture primitive for vynkor plugins \u2014 the single owner of the mic. `mic_start` spawns a well-known host recorder binary directly with argv (never a shell), reads raw PCM from its stdout in a background task, and streams it out as `AudioStreamChunk` envelopes (codec `PCM_S16LE`) to the requested peer \u2014 D-12 machinery, `tts_speak` in reverse. `mic_stop` ends a session (idempotent), `mic_status` reports what is capturing. Declares `PERMISSION_AUDIO`, `PERMISSION_AUDIO_STREAM`, and `PERMISSION_IPC_SEND`.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/mic",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/mic/versions/0.1.0/mic-0.1.0.zip",
+        "sha256": "af683f59155eb8f2041281ba94536b4a2b59e9ae307436fdc537a7567b0e6599",
+        "signature": "b95cb57620ed327e69b7c13493141256d3ac7fbc1325e893f3b109e9321dabc639cce44b0c7dbe76c84fd565c42ade4ecbd6c777368aa3cf513d42d2d0972102",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -79,12 +262,50 @@
       "http"
     ],
     "status": "stable",
-    "source_url": "https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/network",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/network",
     "versions": {
-      "0.1.5": {
-        "archive_url": "https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/network/versions/0.1.5/network-0.1.5.zip",
-        "sha256": "308c7990038a36144ff1729413106c9f6cccf9648a6f689370185c6488efdc4d",
-        "signature": "b64cd9acff1dc025f6da5078ae741ee1996f4f1003dad42e20ce383a4ccafa3ee2ab82dffbba0db58040e2817f9e0eff9ebbbdaa693afbf6e312feaef1bbe304",
+      "0.1.0": {
+        "archive_url": "dist/network/versions/0.1.0/network-0.1.0.zip",
+        "sha256": "80a2a4cc8ad03e4fcc8220a802f7c4e1154a269e9f7071d0479385aa4daf84c0",
+        "signature": "ca0414bca26390d4f07ccaa2905fc819e71f679e7cb323e7ca5db55c53f5aa4f9eff9c8e0968ea6dc0a03834637ca798e4a84b7c146424b50108accbdcb4c001",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "notes": {
+    "name": "Notes",
+    "description": "Note CRUD as a thin schema layer over the [`database`](../database/) plugin. Every note is one JSON document stored under `note:<id>` in this plugin's own private `database` namespace; ids come from an atomic counter (`db_incr` on `meta:next_id`). No local state \u2014 restart-safe by construction.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/notes",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/notes/versions/0.1.0/notes-0.1.0.zip",
+        "sha256": "c46241cc1c6f7c0bbb4135bac00427eabbc4ca27e1cdfe98638c96a4c8594328",
+        "signature": "b64329a2f814a66f4e3e228ccd3f5695a02257da058296eeb41434421d734b427f4d0456d7e7e0f0ec4959a2c7006f8bde78a18fe11738b0d5a571fe9361e10e",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "notify": {
+    "name": "Notify",
+    "description": "Desktop/system notifications on the host, delivered by spawning external binaries. Exposes five actions: `notify_send` (deliver a notification \u2014 optionally silent, optionally spoken), `notify_providers` (list the delivery backends), and the inbox actions `notify_list` / `notify_mark_read` / `notify_delete` (review stored notifications).",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/notify",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/notify/versions/0.1.0/notify-0.1.0.zip",
+        "sha256": "7a2d238d820de960e24aa42e285689c0c3d19c2482ae4d22fbd41776301fb639",
+        "signature": "0b6c287cdb60962003bacdf3ad98f300fb7e830bc81e65c8fcc5e7af4963fe7deb97ad6fbdef616dfadfa1a80fc9168a576340e5d84df569b0c34dbb0875e506",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -98,12 +319,88 @@
       "example"
     ],
     "status": "stable",
-    "source_url": "https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/ping-pong-rs",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/ping-pong-rs",
     "versions": {
       "0.1.0": {
-        "archive_url": "https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/ping-pong/versions/0.1.0/ping-pong-0.1.0.zip",
-        "sha256": "bd74128951b58ca4b40160ac6a71d355fc39fa875ddb4808ca61fd47bfde08d7",
-        "signature": "acb5ae3bdcea91173d9bce77d200bf199a1e13cce790a5734a9fc04e91bdce0034a1c9db0dee1ac60f6325196d73a77e59ee07aed7de15930ca8f62472febf0a",
+        "archive_url": "dist/ping-pong/versions/0.1.0/ping-pong-0.1.0.zip",
+        "sha256": "fcae54077cd2d55ebfe8642a32c1b1a437db05cb31c6844ddbfec661de83f3e3",
+        "signature": "bb2e79157320ca44fba7c587b20baf89aa3e878c6e2604ddb27951ba513f7047049ca303bb21aa9d39886a189ee00020336ee79963977e19909b5f1cbc750502",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "scheduler": {
+    "name": "Scheduler",
+    "description": "Once/cron schedules as a thin schema layer over the [`database`](../database/) plugin. Every schedule is one JSON document stored under `sched:<id>` in this plugin's own private `database` namespace; generated ids come from an atomic counter (`db_incr` on `meta:next_id`). No local state \u2014 restart-safe by construction.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/scheduler",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/scheduler/versions/0.1.0/scheduler-0.1.0.zip",
+        "sha256": "d517d1707f426569f5beba8aea6be966b90fc68d0f5b206e8e48b0538ac27127",
+        "signature": "18c25dca0ea3c91ab1aecd929820e4067d3aeb96a150d1f8eb50d7a3e736a2e7c05e064f6f621b35b247b331563f366cff96fb46a5564e46ca9e9f76923ac007",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "search": {
+    "name": "Search",
+    "description": "Web search for vynkor plugins. Exposes one action, `web_search`. Doesn't open its own sockets \u2014 every request is routed through the `network` plugin's `http_request` action, so `network` must also be registered and running (same model as `ai`/`tts`/`stt`). See `ROADMAP.md` for the design rationale.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/search",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/search/versions/0.1.0/search-0.1.0.zip",
+        "sha256": "41aa1ac425e14e17298f0078deba7e0c95740e7182cd0dadcf3b0568cf822520",
+        "signature": "896022cc636009a328997f1806262fd31394c23e421f48f295f1cf609ee2ec850c8d815bb4daece83cc228da5e14a5dfb6db9247e91bd42d7b056514f976fb01",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "secrets": {
+    "name": "Secrets",
+    "description": "Encrypted credential/API-key vault for Veyron plugins, gated by `PERMISSION_SECRETS`. One ChaCha20-Poly1305-encrypted vault file per calling plugin \u2014 callers cannot see, read, or overwrite each other's secrets.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/secrets",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/secrets/versions/0.1.0/secrets-0.1.0.zip",
+        "sha256": "db0dccb077cd8c53a9dee2fdef4d2639e8a4635fb51da88847cd263bb064899e",
+        "signature": "c24aa169bcf115c39e41dacd44d17e35e342b5b543be885e4f34ada235c2fab3b77ff3080227c7b7192e97daaef196ac1b055dc44dfbf3eacd02d5668b814f08",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "sound": {
+    "name": "Sound",
+    "description": "Audio output primitive for vynkor plugins \u2014 the single owner of the speakers. `sound_play` spawns a well-known host player binary directly with argv (never a shell) and returns immediately; clips play in the background. `sound_stop` kills the current clip (or a specific one), `sound_status` reports what is playing. Declares `PERMISSION_AUDIO` (existing enum value 5).",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/sound",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/sound/versions/0.1.0/sound-0.1.0.zip",
+        "sha256": "5fee92dca0daa5f9cf969f1021f0a1e039099325d16d8c8eebbab9a18efaf929",
+        "signature": "6dbc1fb62fa8580f65e237487232f97c1910f765b2cda05c4dde6af60c22f472b1b1e29fda6435906316032db5e946485f53de16599623953f32367f68724804",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -119,12 +416,50 @@
       "speech"
     ],
     "status": "stable",
-    "source_url": "https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/stt",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/stt",
     "versions": {
-      "0.2.0": {
-        "archive_url": "https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/stt/versions/0.2.0/stt-0.2.0.zip",
-        "sha256": "97cd80a5872da1ad043d4ddc9cb2dd712ba9a54494bf32d67e0018a854fa8249",
-        "signature": "4654ebbcc6e261dddc8c4b2c92fa91fff7aa177d421cae1ba66321beff996a86b76acc96599c9f8b869ecd6c5b7b3c4a460b307633c9678f1ec1ed2fa68bd902",
+      "0.1.0": {
+        "archive_url": "dist/stt/versions/0.1.0/stt-0.1.0.zip",
+        "sha256": "a4e9501fe78a0c32119aa1e6bfaf2a5e0a868405a17dd08b9c7363519b8ad2e9",
+        "signature": "0a008cc31a80ee2858668d76ed0d371482a7320417210401d3a7b623adc94c2e6ce35d7780a2c4118ae91625799287a9b9616c37f2787ef947aa5b207907fa08",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "sync": {
+    "name": "Sync",
+    "description": "Host-side versioned KV state store for Veyron plugins (SQLite-backed), gated by `PERMISSION_STORAGE` and publishing a `sync.delta` event on every mutation (`PERMISSION_EVENT_PUBLISH`). This is the D-13 host side: clients pull a snapshot then subscribe to deltas; on reconnect they re-pull the snapshot. See `docs/REMOTE_DEVICES_PLAN.md` \u00a711 (\"Sync\") and the D-13 task in `docs/REMOTE_DEVICES_ROADMAP.md` in the `veyron` (kernel) repo.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/sync",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/sync/versions/0.1.0/sync-0.1.0.zip",
+        "sha256": "b2acfe83f5853b953c57c0affb7884ff2e25306cff265208e523382a4cdbed8d",
+        "signature": "29d8c3fee0743cb41e8531d1e08e6d70927f764e94e1ae9f3a24b660035215f1553375f48b3cadccbd77a93bad1aaa20c26542d38fd8ac4707c68f9417113a00",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "sync-client": {
+    "name": "Sync Client",
+    "description": "The D-13 client side: a local mirror of the host `sync` plugin's store, plus a periodic heartbeat. On every (re)connect it subscribes to the host's delta events, pulls a `sync_get_snapshot` to seed the mirror, then applies deltas as they arrive. The heartbeat pushes this device's liveness into the host's sync state via `sync_set`, and reconnect re-pulls the snapshot so an offline device catches up.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/sync-client",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/sync-client/versions/0.1.0/sync-client-0.1.0.zip",
+        "sha256": "f3a4066741ddd44dd6d79cbca9b80bab18827064c7634cab47de4012199974d0",
+        "signature": "24e6b2bf18a440598039077a79c48c89a87f305981ac0e344a60332bdc6a6f6b5cd12fa265a96c80e4ac5edb072a9473d9df5482040c996d98213c287b820400",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -142,12 +477,12 @@
       "power"
     ],
     "status": "stable",
-    "source_url": "https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/system",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/system",
     "versions": {
-      "0.3.0": {
-        "archive_url": "https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/system/versions/0.3.0/system-0.3.0.zip",
-        "sha256": "d77326c086242b91104dc8c25c537ca9becf524bd2516996f0b70ef66dbabbe6",
-        "signature": "6390aa143b8c7d9320ed93c293ba0919482eb5582cee81913df2da2584dcf911a22a250a63351253bc172073b7e12e7ce042566f633927a5befd2b03e473340e",
+      "0.1.0": {
+        "archive_url": "dist/system/versions/0.1.0/system-0.1.0.zip",
+        "sha256": "ef9be6d083ae1c695d31f0caddcac8b19cff47dcdf0a88c392c1233938fd3252",
+        "signature": "9e93fe85d85de7e7d00cf259b198b1edcc914bf3beca40464b4c53b307002d2bc59a64653b7d9c1d8f66780ef6a8020651dc621e1ec3ad0be1c7a8b2fb33b00c",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -163,12 +498,31 @@
       "speech"
     ],
     "status": "stable",
-    "source_url": "https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/tts",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/tts",
     "versions": {
-      "0.2.0": {
-        "archive_url": "https://raw.githubusercontent.com/veyron-core/vynkor-plugins/main/dist/tts/versions/0.2.0/tts-0.2.0.zip",
-        "sha256": "6cb495e9bc2215ffe44b6114f86812136bf7d893224cc44970bb334c7b1e4ebb",
-        "signature": "1323afe9b571791094c1ec654e2774a6921e98af40ee13189785904e7a0a0ad3d8041ee3a7b3d59d013b457089b3ef9c8371473a2512ec8a895a73b449358104",
+      "0.1.0": {
+        "archive_url": "dist/tts/versions/0.1.0/tts-0.1.0.zip",
+        "sha256": "e0d8bc2550d3de363bb379665c5915e020a47d018ab422228960c798d1b948bf",
+        "signature": "ecb5622c36a87de56d55f363134e99214574ca3cb095892443389820f94a789fd49bd12ca2387f18154d956208653eee225483458b1c9a6832125754ce65a708",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      }
+    }
+  },
+  "vector-db": {
+    "name": "Vector Db",
+    "description": "Embedding upsert + similarity search for Vynkor plugins, gated by `PERMISSION_STORAGE`. One SQLite file per calling plugin \u2014 callers cannot see each other's collections. Brute-force cosine on L2-normalized vectors, per-collection dimension enforcement.",
+    "category": "utility",
+    "tags": [
+      "stable"
+    ],
+    "status": "",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/vector-db",
+    "versions": {
+      "0.1.0": {
+        "archive_url": "dist/vector-db/versions/0.1.0/vector-db-0.1.0.zip",
+        "sha256": "cf5eeae0395e5e28035afb73c6d85e765a2f9242651bb6cd31afd5deaca0d67e",
+        "signature": "4fe9cfd54f8b3d115443ea990852d83665ff062485f38b00d7f930c5e0594fc1cba24265a77d52cf9236abb4047f3293f67fc5d6fe5a05167908c2d673fac40a",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }

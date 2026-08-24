@@ -8,24 +8,37 @@
   },
   "binary": "media",
   "events": [],
-  "files": ["media", "plugin.json"],
+  "files": [
+    "media",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "media_play",
       "input": {
         "type": "object",
         "properties": {
-          "player": { "type": "string", "description": "MPRIS player name (org.mpris.MediaPlayer2.<name>); omit for the default player." },
-          "uri": { "type": "string", "description": "Optional media URI to open before playing." }
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name (org.mpris.MediaPlayer2.<name>); omit for the default player."
+          },
+          "uri": {
+            "type": "string",
+            "description": "Optional media URI to open before playing."
+          }
         },
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" }
+          "ok": {
+            "type": "boolean"
+          }
         },
-        "required": ["ok"],
+        "required": [
+          "ok"
+        ],
         "additionalProperties": false
       }
     },
@@ -34,16 +47,23 @@
       "input": {
         "type": "object",
         "properties": {
-          "player": { "type": "string", "description": "MPRIS player name; omit for the default player." }
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
         },
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" }
+          "ok": {
+            "type": "boolean"
+          }
         },
-        "required": ["ok"],
+        "required": [
+          "ok"
+        ],
         "additionalProperties": false
       }
     },
@@ -52,17 +72,28 @@
       "input": {
         "type": "object",
         "properties": {
-          "player": { "type": "string", "description": "MPRIS player name; omit for the default player." }
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
         },
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" },
-          "playing": { "type": "boolean", "description": "Playback state after the toggle." }
+          "ok": {
+            "type": "boolean"
+          },
+          "playing": {
+            "type": "boolean",
+            "description": "Playback state after the toggle."
+          }
         },
-        "required": ["ok", "playing"],
+        "required": [
+          "ok",
+          "playing"
+        ],
         "additionalProperties": false
       }
     },
@@ -71,16 +102,23 @@
       "input": {
         "type": "object",
         "properties": {
-          "player": { "type": "string", "description": "MPRIS player name; omit for the default player." }
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
         },
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" }
+          "ok": {
+            "type": "boolean"
+          }
         },
-        "required": ["ok"],
+        "required": [
+          "ok"
+        ],
         "additionalProperties": false
       }
     },
@@ -89,16 +127,23 @@
       "input": {
         "type": "object",
         "properties": {
-          "player": { "type": "string", "description": "MPRIS player name; omit for the default player." }
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
         },
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" }
+          "ok": {
+            "type": "boolean"
+          }
         },
-        "required": ["ok"],
+        "required": [
+          "ok"
+        ],
         "additionalProperties": false
       }
     },
@@ -107,16 +152,23 @@
       "input": {
         "type": "object",
         "properties": {
-          "player": { "type": "string", "description": "MPRIS player name; omit for the default player." }
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
         },
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" }
+          "ok": {
+            "type": "boolean"
+          }
         },
-        "required": ["ok"],
+        "required": [
+          "ok"
+        ],
         "additionalProperties": false
       }
     },
@@ -125,18 +177,65 @@
       "input": {
         "type": "object",
         "properties": {
-          "position_ms": { "type": "integer", "minimum": 0, "description": "Absolute seek target in milliseconds from the start of the track." },
-          "player": { "type": "string", "description": "MPRIS player name; omit for the default player." }
+          "position_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Absolute seek target in milliseconds from the start of the track."
+          },
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
         },
-        "required": ["position_ms"],
+        "required": [
+          "position_ms"
+        ],
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "position_ms": { "type": "integer", "description": "Resulting position in milliseconds." }
+          "position_ms": {
+            "type": "integer",
+            "description": "Resulting position in milliseconds."
+          }
         },
-        "required": ["position_ms"],
+        "required": [
+          "position_ms"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "media_seek_relative",
+      "input": {
+        "type": "object",
+        "properties": {
+          "offset_ms": {
+            "type": "integer",
+            "description": "Signed offset in milliseconds from the current position (negative seeks backward; result clamps at 0)."
+          },
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
+        },
+        "required": [
+          "offset_ms"
+        ],
+        "additionalProperties": true
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "position_ms": {
+            "type": "integer",
+            "description": "Requested target position in milliseconds after applying the offset."
+          }
+        },
+        "required": [
+          "position_ms"
+        ],
         "additionalProperties": false
       }
     },
@@ -147,21 +246,34 @@
         "properties": {
           "level": {
             "description": "Target volume: a 0.0..1.0 fraction or a 0..100 integer percentage.",
-            "type": ["number", "integer"],
+            "type": [
+              "number",
+              "integer"
+            ],
             "minimum": 0,
             "maximum": 100
           },
-          "player": { "type": "string", "description": "MPRIS player name; omit for the default player." }
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
         },
-        "required": ["level"],
+        "required": [
+          "level"
+        ],
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "volume": { "type": "number", "description": "Resulting volume as a 0.0..1.0 fraction." }
+          "volume": {
+            "type": "number",
+            "description": "Resulting volume as a 0.0..1.0 fraction."
+          }
         },
-        "required": ["volume"],
+        "required": [
+          "volume"
+        ],
         "additionalProperties": false
       }
     },
@@ -170,24 +282,69 @@
       "input": {
         "type": "object",
         "properties": {
-          "player": { "type": "string", "description": "MPRIS player name; omit for the default player." }
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
         },
         "additionalProperties": true
       },
       "output": {
         "type": "object",
         "properties": {
-          "player": { "type": "string", "description": "MPRIS player name queried." },
-          "status": { "type": "string", "enum": ["Playing", "Paused", "Stopped"] },
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name queried."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Playing",
+              "Paused",
+              "Stopped"
+            ]
+          },
           "metadata": {
             "type": "object",
             "description": "Normalized MPRIS metadata (title, artists, album, length_micros, track_id, art_url).",
             "additionalProperties": true
           },
-          "volume": { "type": "number", "description": "Volume as a 0.0..1.0 fraction." },
-          "position_ms": { "type": "integer", "description": "Current playback position in milliseconds." }
+          "volume": {
+            "type": "number",
+            "description": "Volume as a 0.0..1.0 fraction."
+          },
+          "position_ms": {
+            "type": "integer",
+            "description": "Current playback position in milliseconds."
+          },
+          "rate": {
+            "type": "number",
+            "description": "Playback rate (1.0 normal, 0.0 paused)."
+          },
+          "shuffle": {
+            "type": "boolean",
+            "description": "Shuffle enabled."
+          },
+          "loop_status": {
+            "type": "string",
+            "enum": [
+              "None",
+              "Track",
+              "Playlist"
+            ],
+            "description": "Loop mode."
+          }
         },
-        "required": ["player", "status", "metadata", "volume", "position_ms"],
+        "required": [
+          "player",
+          "status",
+          "metadata",
+          "volume",
+          "position_ms",
+          "rate",
+          "shuffle",
+          "loop_status"
+        ],
         "additionalProperties": false
       }
     },
@@ -202,11 +359,92 @@
         "properties": {
           "players": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "MPRIS player names (org.mpris.MediaPlayer2.<name>) available on the session bus."
           }
         },
-        "required": ["players"],
+        "required": [
+          "players"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "media_shuffle",
+      "input": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable shuffle (true) or disable (false). Alias `shuffle` also accepted."
+          },
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "additionalProperties": true
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "shuffle": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shuffle"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "media_loop",
+      "input": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "track",
+              "playlist",
+              "None",
+              "Track",
+              "Playlist"
+            ],
+            "description": "Loop mode: none / track (single) / playlist (all)."
+          },
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for the default player."
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "additionalProperties": true
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "loop_status": {
+            "type": "string",
+            "enum": [
+              "None",
+              "Track",
+              "Playlist"
+            ]
+          }
+        },
+        "required": [
+          "loop_status"
+        ],
         "additionalProperties": false
       }
     }
