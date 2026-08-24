@@ -48,9 +48,11 @@ Dependency order — each row can start once everything in "depends on" ships.
 | `email` | send/receive mail (SMTP/IMAP) | `network`, `secrets` (mailbox creds) | `network` (caller of gated `http_request`) |
 | `launcher` | launch apps/games by name — Steam (`steam://rungameid/<id>`, reads `libraryfolders.vdf`/`appmanifest_*.acf`) as one provider, generic app launch as another | `filesystem` (read manifests) | `PERMISSION_LAUNCH` (defined, proto v1.4) |
 | `capture` | screen/window capture + webcam frame + video recording — one PipeWire-based plugin (screen portal / V4L2 share the stack); OCR is a local tesseract spawn over its own frames (argv-only like `clipboard`/`notify`, fully offline; cloud-vision OCR stays available via `ai` vision for hard cases). Absorbs the old standalone `screenshot` row and the `camera` idea | — | `PERMISSION_SCREEN` (defined, proto v1.4), `PERMISSION_CAMERA` (new, enum 23) |
+| `mic` | microphone capture primitive — single owner of the mic, mirror of `sound` (speakers). **Shipped** (v0.1.0, see `plugins/mic/`) — `mic_start`/`mic_stop`/`mic_status` run a capture loop streaming PCM frames out as `AudioStreamChunk`s (D-12 machinery, `tts_speak` in reverse); host-binary record chain `pw-cat --record`→`parec`→`arecord`, argv-only spawn, device/format/rate params; exists so headless clients (`daemon`) get one mic owner instead of each reimplementing capture | — | `PERMISSION_AUDIO`, `PERMISSION_AUDIO_STREAM`, `PERMISSION_IPC_SEND` (peer unicast needs the D-12 gates, same as tts/stt) |
 | `wifi` | Wi-Fi control via NetworkManager D-Bus: scan/list/connect/disconnect/forget/toggle radio, known-network management. Credentials stay in NM's own profile store — the plugin orchestrates and never handles raw PSKs | — | `PERMISSION_WIFI` (new, enum 20) |
 | `bluetooth` | device list/scan/pair/connect/disconnect, battery level, audio-profile select — BlueZ over D-Bus via zbus (same stack as `media`) | — | `PERMISSION_BLUETOOTH` (new, enum 21) |
 | `input` | virtual keyboard/mouse injection — type/click/move/scroll/key-tap via `ydotool`/`wtype`/`xdotool` spawn (argv-only); the agent's hands next to `window` (focus) and `capture` (eyes) | — | `PERMISSION_INPUT` (new, enum 22) |
+| `hotkey` | global key combos → function triggers over scheduler's fire model (best-effort `plugin.hotkey.fired` event OR kernel-routed action call): backends XDG portal `GlobalShortcuts` (zbus session bus, same stack as `media`) / compositor binds (Hyprland/sway `bind = …, exec` invoking the action) / X11 `XGrabKey` fallback; runtime binding via `hotkey_bind`/`hotkey_list`/`hotkey_unbind`; no raw evdev reading (keylogger surface — breaks the narrow-permission-per-plugin model) | — | `PERMISSION_HOTKEY` (new, enum 24 — must land in the same wire bump as 20–23, installer-probe gap rule) |
 | `metrics` | periodic host samples (CPU/RAM/disk/battery/network) into own SQLite + range/query API for webclient graphs; timer loop like calendar's reminder scan, own storage file like vector-db's backend | — | `PERMISSION_STORAGE` (existing) |
 | `window` | list/focus/switch/minimize/maximize open windows | — | `PERMISSION_SYSTEM` (existing, shares scope with `system`) |
 | `home` | home automation over a custom protocol to bare-metal devices (ESP32/Arduino) — not Home Assistant/MQTT, own wire format | `network` (or serial/BLE transport, TBD) | `PERMISSION_HOME` (defined, proto v1.4) |
@@ -58,7 +60,7 @@ Dependency order — each row can start once everything in "depends on" ships.
 | `cloud-sync` | remote snapshot transport for D-13 `sync` state — S3/WebDAV/rsync.net via `network`'s gated `http_request`; the host↔remote leg that `sync`/`sync-client` leave host-local (timer pull/push, conflict wins host) | `sync`, `network`, `secrets` (remote creds) | `PERMISSION_NETWORK` (caller of gated `http_request`), `PERMISSION_SECRETS` |
 | `agent` | `plugins/agent/` | — | multi-step goal loop: `ai` chat + tool-call dispatch to other plugins' actions, state persisted. **Shipped** (v0.1.0, see the Shipped table) — tool discovery runs over new kernel read-only commands (`list_plugins` + `get_manifest` exemption from `PERMISSION_KERNEL_ADMIN`, see "Kernel-side changes needed") | `ai`, `database` | storage, event_publish (+ operator JWT grant for dispatched actions) |
 | `webclient` | browser chat UI + mic voice input/TTS playback, talks to kernel WS API | `agent` (Kairo), `stt`, `tts` | none itself — client only, auth via kernel JWT |
-| `daemon` | headless background service: mic listen loop, TTS output, no window/browser | `agent` (Kairo), `stt`, `tts` | none itself — client only, auth via kernel JWT |
+| `daemon` | headless background service: mic listen loop, TTS output, no window/browser | `agent` (Kairo), `stt`, `tts`, `mic` (PCM source — nothing else owns the mic headlessly) | none itself — client only, auth via kernel JWT |
 | `telegram` | third client: two-way chat + voice notes via Telegram bot API | `agent` (Kairo), `stt`, `tts`, `secrets` (bot token) | none itself — client only |
 
 `notes` and `calendar` shipped as exactly that — thin schema + validation on
@@ -249,11 +251,12 @@ What's actually new, in `veyron`:
   loudly instead of faking OK.
 
   **Next batch (not yet defined in proto)** — when the new plugins land,
-  values continue contiguously at **20–23**, same installer-probe
+  values continue contiguously at **20–24**, same installer-probe
   constraint: `PERMISSION_WIFI` = 20 (`wifi`),
   `PERMISSION_BLUETOOTH` = 21 (`bluetooth`), `PERMISSION_INPUT` = 22
-  (`input`), `PERMISSION_CAMERA` = 23 (`capture`). One wire bump covers
-  all four; land them together or keep the gap rule in mind if split.
+  (`input`), `PERMISSION_CAMERA` = 23 (`capture`), `PERMISSION_HOTKEY` =
+  24 (`hotkey`). One wire bump covers all five; land them together or
+  keep the gap rule in mind if split.
   `metrics`, and the extended `system` need no new values — they reuse
   existing ones (`sound` already shipped that way on `PERMISSION_AUDIO`).
 - **Regenerate `veyron-wire` prost types.** **Shipped** — the generated
