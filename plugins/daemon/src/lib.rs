@@ -32,15 +32,105 @@ use request::{parse_request, DaemonRequest};
 /// Fixed for v0.1: stt is the only shipped transcript provider.
 pub const STT_TARGET: &str = "stt";
 
+/// Kernel-namespaced event `stt` publishes when the (opt-in) energy VAD
+/// hears speech begin on a listen stream.
+pub const EV_SPEECH_STARTED: &str = "plugin.stt.stt_speech_started";
+
+/// Kernel-namespaced event `stt` publishes when an utterance ends —
+/// `silence_ms` of quiet after real speech. This is the vad-mode endpoint.
+pub const EV_SPEECH_ENDED: &str = "plugin.stt.stt_speech_ended";
+
+/// Kernel-namespaced events the `hotkey` plugin publishes for push-to-talk.
+pub const EV_HOTKEY_PRESSED: &str = "plugin.hotkey.hotkey_pressed";
+pub const EV_HOTKEY_RELEASED: &str = "plugin.hotkey.hotkey_released";
+
+/// How the daemon decides when the user stopped talking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ListenMode {
+    /// Fixed capture window (`turn_ms`) per turn — v0.1 behavior.
+    #[default]
+    Window,
+    /// Open-ended capture; the turn ends when `stt` reports the utterance
+    /// ended (`EV_SPEECH_ENDED`, requires `STT_PLUGIN_VAD=on` on the stt
+    /// side) or a configured cap elapses. Enables hands-free conversation:
+    /// enable once, talk whenever.
+    Vad,
+    /// Push-to-talk: idle until `hotkey_pressed`, capture while held, end
+    /// on `hotkey_released`. Requires the `hotkey` plugin registered.
+    Ptt,
+}
+
+impl ListenMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Window => "window",
+            Self::Vad => "vad",
+            Self::Ptt => "ptt",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "window" => Some(Self::Window),
+            "vad" => Some(Self::Vad),
+            "ptt" => Some(Self::Ptt),
+            _ => None,
+        }
+    }
+}
+
+/// In-process event bus: the serve loop forwards every inbound kernel
+/// `Event` here; the vad/ptt listen stages subscribe and await their
+/// endpoints. Broadcast because several waiters may coexist (a manual turn
+/// while the ptt task idles).
+#[derive(Clone)]
+pub struct Bus {
+    tx: tokio::sync::broadcast::Sender<(String, Value)>,
+}
+
+impl Bus {
+    pub fn new() -> Self {
+        let (tx, _) = tokio::sync::broadcast::channel(128);
+        Self { tx }
+    }
+
+    /// Fan out one kernel event to all subscribers. Never fails: with no
+    /// subscribers there is simply nobody to notify.
+    pub fn send(&self, event_type: &str, payload: Value) {
+        let _ = self.tx.send((event_type.to_string(), payload));
+    }
+
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<(String, Value)> {
+        self.tx.subscribe()
+    }
+}
+
+impl Default for Bus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Runtime configuration (environment-driven; see `config.example.yaml`).
 #[derive(Debug, Clone)]
 pub struct Config {
     /// Start with the background loop enabled.
     pub enabled_at_boot: bool,
-    /// Mic capture window per voice turn.
+    /// How turns decide when speech is over.
+    pub mode: ListenMode,
+    /// Mic capture window per voice turn (`window` mode only).
     pub turn_ms: u64,
     /// Delay between one turn's end and the next tick while enabled.
     pub gap_ms: u64,
+    /// `vad` mode: max silence waited BEFORE any speech before giving up.
+    pub vad_wait_ms: u64,
+    /// `vad` mode: hard cap on one utterance even without an ended event.
+    pub vad_max_utterance_ms: u64,
+    /// `ptt` mode: hotkey binding id that triggers a turn.
+    pub ptt_binding: String,
+    /// `ptt` mode: auto-release when the key was held this long (ms) — a
+    /// stuck key must not hold the mic forever.
+    pub ptt_max_hold_ms: u64,
     /// Capture rate negotiated with `stt_listen_start` and `mic_start`.
     pub sample_rate_hz: u32,
     /// mic chunk duration.
@@ -65,8 +155,13 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             enabled_at_boot: false,
+            mode: ListenMode::Window,
             turn_ms: 6_000,
             gap_ms: 2_000,
+            vad_wait_ms: 30_000,
+            vad_max_utterance_ms: 20_000,
+            ptt_binding: "ptt".into(),
+            ptt_max_hold_ms: 60_000,
             sample_rate_hz: 16_000,
             chunk_ms: 100,
             stream_id: 7,
@@ -90,11 +185,31 @@ impl Config {
             let v = v.trim().to_ascii_lowercase();
             c.enabled_at_boot = !v.is_empty() && v != "false" && v != "0";
         }
+        if let Ok(v) = std::env::var("DAEMON_PLUGIN_MODE") {
+            if let Some(m) = ListenMode::parse(&v) {
+                c.mode = m;
+            }
+        }
         if let Some(v) = read_u64("DAEMON_PLUGIN_TURN_MS") {
             c.turn_ms = v.clamp(100, 120_000);
         }
         if let Some(v) = read_u64("DAEMON_PLUGIN_GAP_MS") {
             c.gap_ms = v.clamp(50, 3_600_000);
+        }
+        if let Some(v) = read_u64("DAEMON_PLUGIN_VAD_WAIT_MS") {
+            c.vad_wait_ms = v.clamp(1_000, 600_000);
+        }
+        if let Some(v) = read_u64("DAEMON_PLUGIN_VAD_MAX_UTTERANCE_MS") {
+            c.vad_max_utterance_ms = v.clamp(500, 120_000);
+        }
+        if let Ok(v) = std::env::var("DAEMON_PLUGIN_PTT_BINDING") {
+            let v = v.trim();
+            if !v.is_empty() {
+                c.ptt_binding = v.into();
+            }
+        }
+        if let Some(v) = read_u64("DAEMON_PLUGIN_PTT_MAX_HOLD_MS") {
+            c.ptt_max_hold_ms = v.clamp(500, 600_000);
         }
         if let Some(v) = read_u64("DAEMON_PLUGIN_SAMPLE_RATE_HZ") {
             c.sample_rate_hz = v.clamp(8_000, 192_000) as u32;
@@ -192,6 +307,7 @@ impl Rpc {
 pub struct DaemonState {
     enabled: AtomicBool,
     busy: AtomicBool,
+    capturing: AtomicBool,
     turns_completed: AtomicU64,
     last_turn: Mutex<Option<Value>>,
 }
@@ -209,6 +325,16 @@ impl DaemonState {
         self.enabled.store(on, Ordering::SeqCst);
     }
 
+    /// True while the mic is actually open (vad/ptt listen stages set this
+    /// around their capture; `window` holds it for its whole fixed window).
+    pub fn capturing(&self) -> bool {
+        self.capturing.load(Ordering::SeqCst)
+    }
+
+    pub fn set_capturing(&self, on: bool) {
+        self.capturing.store(on, Ordering::SeqCst);
+    }
+
     /// Claim the single turn slot: `true` exactly once until [`Self::end_turn`].
     /// Both the timer tick and `daemon_turn` go through this, so a manual
     /// turn can't overlap the loop's turn (the mic has one owner).
@@ -224,10 +350,12 @@ impl DaemonState {
         self.busy.store(false, Ordering::SeqCst);
     }
 
-    pub fn snapshot(&self) -> Value {
+    pub fn snapshot(&self, mode: &str) -> Value {
         json!({
             "enabled": self.enabled(),
             "busy": self.busy.load(Ordering::SeqCst),
+            "capturing": self.capturing(),
+            "mode": mode,
             "turns_completed": self.turns_completed.load(Ordering::SeqCst),
             "last_turn":
                 self.last_turn
@@ -264,6 +392,7 @@ pub async fn handle_action(
     config: &Config,
     action: &str,
     params_json: &[u8],
+    bus: Option<&Bus>,
 ) -> Result<ActionResult, String> {
     match parse_request(action, params_json)? {
         DaemonRequest::Enable => {
@@ -274,14 +403,14 @@ pub async fn handle_action(
             state.set_enabled(false);
             ok(json!({ "enabled": false }), Some(state_changed(false)))
         }
-        DaemonRequest::Status => ok(state.snapshot(), None),
+        DaemonRequest::Status => ok(state.snapshot(config.mode.as_str()), None),
         DaemonRequest::Turn { text } => {
             if !state.try_begin_turn() {
                 return Err(
                     "ERR_DAEMON_BUSY: another voice turn is already in progress".into()
                 );
             }
-            let result = run_voice_turn(&rpc, state.clone(), config, text).await;
+            let result = run_voice_turn(&rpc, state.clone(), config, text, bus).await;
             state.end_turn(&result);
             let event = ChangeEvent {
                 event_type: "turn.completed",
@@ -324,21 +453,33 @@ pub async fn handle_action(
 /// One listen→think→speak cycle. Never panics, never fails the caller: every
 /// stage failure lands in the returned payload as `status: "error"` so the
 /// background loop can run turns unattended forever.
+///
+/// The listen stage follows [`Config::mode`]: `window` holds the mic for a
+/// fixed `turn_ms`; `vad` ends on stt's speech-ended event (falling back to
+/// window behavior when no bus is available, i.e. in tests without a kernel
+/// event feed); `ptt` falls back to the fixed window because a manual turn
+/// has nobody holding the key.
 pub async fn run_voice_turn(
     rpc: &Rpc,
-    _state: std::sync::Arc<DaemonState>,
+    state: std::sync::Arc<DaemonState>,
     config: &Config,
     text_override: Option<String>,
+    bus: Option<&Bus>,
 ) -> Value {
     let started = Instant::now();
     let transcript = match text_override {
         Some(t) => t,
-        None => match listen(rpc, config).await {
+        None => match listen(rpc, config, state.as_ref(), bus).await {
             Ok(t) => t,
             Err(e) => return turn_result("error", String::new(), None, false, started, Some(e)),
         },
     };
+    respond(rpc, config, transcript, started).await
+}
 
+/// Think+speak tail shared by every listen flavor: agent round-trip, then
+/// speak the answer aloud. Empty transcripts short-circuit to `silent`.
+pub async fn respond(rpc: &Rpc, config: &Config, transcript: String, started: Instant) -> Value {
     if transcript.trim().is_empty() {
         return turn_result("silent", transcript, None, false, started, None);
     }
@@ -371,11 +512,47 @@ pub async fn run_voice_turn(
     }
 }
 
-/// The listen stage: open an stt accumulation buffer, point mic at it, hold
-/// the capture window, then stop both and take the transcript. `mic_stop`
-/// flushes `end_of_stream` to stt BEFORE `stt_listen_stop` transcribes — the
-/// ordering below is load-bearing.
-async fn listen(rpc: &Rpc, config: &Config) -> Result<String, String> {
+/// Dispatch the listen stage by mode.
+async fn listen(
+    rpc: &Rpc,
+    config: &Config,
+    state: &DaemonState,
+    bus: Option<&Bus>,
+) -> Result<String, String> {
+    match (config.mode, bus) {
+        (ListenMode::Vad, Some(bus)) => {
+            let session = start_capture(rpc, config).await?;
+            state.set_capturing(true);
+            let end = wait_for_speech_end(config, bus).await;
+            state.set_capturing(false);
+            let _ = end;
+            finish_capture(rpc, config, session).await
+        }
+        _ => listen_window(rpc, config, state).await,
+    }
+}
+
+/// `window` mode listen: open a capture, hold it for the fixed window, stop.
+async fn listen_window(rpc: &Rpc, config: &Config, state: &DaemonState) -> Result<String, String> {
+    let session = start_capture(rpc, config).await?;
+    state.set_capturing(true);
+    tokio::time::sleep(std::time::Duration::from_millis(config.turn_ms)).await;
+    let transcript = finish_capture(rpc, config, session).await;
+    state.set_capturing(false);
+    transcript
+}
+
+/// One mic capture session: an stt accumulation buffer plus the recorder
+/// pointed at it. Dropping without [`finish_capture`] leaks the buffer —
+/// always run the pair.
+struct CaptureSession {
+    session_id: String,
+}
+
+/// Open an stt accumulation buffer and start the mic aimed at it. Fails
+/// closed: if `mic_start` errors after `stt_listen_start` succeeded, the
+/// buffer is discarded before returning so no stale stream survives.
+async fn start_capture(rpc: &Rpc, config: &Config) -> Result<CaptureSession, String> {
     rpc.call(
         "stt_listen_start",
         json!({
@@ -398,17 +575,32 @@ async fn listen(rpc: &Rpc, config: &Config) -> Result<String, String> {
         }),
         config.timeout_ms,
     )
-    .await?;
+    .await;
+    let mic = match mic {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = rpc
+                .call(
+                    "stt_listen_stop",
+                    json!({ "stream_id": config.stream_id }),
+                    config.timeout_ms,
+                )
+                .await;
+            return Err(e);
+        }
+    };
     let session_id = mic["session_id"]
         .as_str()
         .ok_or_else(|| "mic_start returned no session_id".to_string())?
         .to_string();
+    Ok(CaptureSession { session_id })
+}
 
-    tokio::time::sleep(std::time::Duration::from_millis(config.turn_ms)).await;
-
-    // Stop capturing first: mic_stop flushes end_of_stream to the peer, and
-    // only then does stt have the complete buffer to transcribe.
-    rpc.call("mic_stop", json!({ "session_id": session_id }), config.timeout_ms).await?;
+/// Close a capture and transcribe: `mic_stop` first — it flushes
+/// `end_of_stream` to stt — then `stt_listen_stop` over the complete buffer.
+/// The ordering below is load-bearing.
+async fn finish_capture(rpc: &Rpc, config: &Config, session: CaptureSession) -> Result<String, String> {
+    rpc.call("mic_stop", json!({ "session_id": session.session_id }), config.timeout_ms).await?;
 
     let stop = rpc
         .call(
@@ -421,6 +613,147 @@ async fn listen(rpc: &Rpc, config: &Config) -> Result<String, String> {
         .as_str()
         .map(str::to_string)
         .ok_or_else(|| "stt_listen_stop returned no text".to_string())
+}
+
+/// What ended a vad-mode capture.
+#[derive(Debug, PartialEq, Eq)]
+enum SpeechEnd {
+    /// stt reported the utterance boundary — the happy path.
+    Ended,
+    /// No speech within `vad_wait_ms`.
+    Silent,
+    /// Speech ran past `vad_max_utterance_ms` with no ending event.
+    MaxUtterance,
+}
+
+/// Await the vad-mode endpoint off the bus: subscribe BEFORE any capture
+/// starts so events racing the mic open are retained by the broadcast
+/// channel's backlog.
+async fn wait_for_speech_end(config: &Config, bus: &Bus) -> SpeechEnd {
+    let mut rx = bus.subscribe();
+    let mut speaking = false;
+    let mut idle_deadline =
+        tokio::time::Instant::now() + std::time::Duration::from_millis(config.vad_wait_ms);
+    loop {
+        let until_utterance_cap =
+            tokio::time::Instant::now() + std::time::Duration::from_millis(config.vad_max_utterance_ms);
+        let deadline = if speaking { until_utterance_cap } else { idle_deadline };
+        tokio::select! {
+            _ = tokio::time::sleep_until(deadline) => {
+                return if speaking { SpeechEnd::MaxUtterance } else { SpeechEnd::Silent };
+            }
+            ev = rx.recv() => match ev {
+                Ok((etype, payload)) => {
+                    let sid = payload.get("stream_id").and_then(Value::as_i64);
+                    let ours = sid == Some(config.stream_id as i64);
+                    if !ours {
+                        continue;
+                    }
+                    match etype.as_str() {
+                        EV_SPEECH_STARTED if !speaking => {
+                            speaking = true;
+                            idle_deadline = tokio::time::Instant::now()
+                                + std::time::Duration::from_millis(config.vad_wait_ms);
+                        }
+                        EV_SPEECH_ENDED => return SpeechEnd::Ended,
+                        _ => {}
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => return SpeechEnd::Silent,
+            },
+        }
+    }
+}
+
+/// Push-to-talk turn: capture opens when the key went down and closes on
+/// release (or the max-hold cap). Runs inside the ptt task with its own bus
+/// receiver, so release events can't be missed while the mic opens.
+pub async fn run_ptt_turn(
+    rpc: &Rpc,
+    config: &Config,
+    rx: &mut tokio::sync::broadcast::Receiver<(String, Value)>,
+) -> Value {
+    let started = Instant::now();
+    let transcript = match ptt_listen(rpc, config, rx).await {
+        Ok(t) => t,
+        Err(e) => return turn_result("error", String::new(), None, false, started, Some(e)),
+    };
+    respond(rpc, config, transcript, started).await
+}
+
+/// The long-lived push-to-talk worker (`ptt` mode): idles on the hotkey
+/// event stream, claims the single turn slot on a matching press, captures
+/// until release, then thinks+speaks like any other turn. Exits only when
+/// the bus closes (kernel gone).
+pub async fn ptt_task(
+    rpc: Rpc,
+    state: std::sync::Arc<DaemonState>,
+    config: Config,
+    bus: Bus,
+    outbound: tokio::sync::mpsc::Sender<Envelope>,
+) {
+    let mut rx = bus.subscribe();
+    loop {
+        let (etype, payload) = match rx.recv().await {
+            Ok(ev) => ev,
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(_) => break,
+        };
+        if etype != EV_HOTKEY_PRESSED || !state.enabled() {
+            continue;
+        }
+        if payload.get("binding").and_then(Value::as_str)
+            != Some(config.ptt_binding.as_str())
+        {
+            continue;
+        }
+        if !state.try_begin_turn() {
+            // A manual turn holds the mic; the keypress is dropped rather
+            // than queued — pressing again once idle works.
+            continue;
+        }
+        state.set_capturing(true);
+        let result = run_ptt_turn(&rpc, &config, &mut rx).await;
+        state.set_capturing(false);
+        state.end_turn(&result);
+        let ev = ChangeEvent { event_type: "turn.completed", payload: result };
+        let _ = outbound.send(event_envelope(&ev)).await;
+    }
+}
+
+/// The ptt listen stage: open the capture, wait for the key release (the
+/// same stream_id filter as vad mode), close, transcribe.
+async fn ptt_listen(
+    rpc: &Rpc,
+    config: &Config,
+    rx: &mut tokio::sync::broadcast::Receiver<(String, Value)>,
+) -> Result<String, String> {
+    let session = start_capture(rpc, config).await?;
+    let released = loop {
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(config.ptt_max_hold_ms),
+            rx.recv(),
+        )
+        .await
+        {
+            Ok(Ok((etype, payload))) => {
+                let ours = payload.get("binding").and_then(Value::as_str)
+                    == Some(config.ptt_binding.as_str());
+                if etype == EV_HOTKEY_RELEASED && ours {
+                    break Ok(());
+                }
+                // Other events (stt chatter, unrelated bindings) don't end
+                // the hold; keep waiting.
+            }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+            // Bus closed (kernel gone) or hold cap hit — either way stop
+            // capturing and take whatever was said so far.
+            _ => break Err("hotkey release never arrived (max hold elapsed)".to_string()),
+        }
+    };
+    let transcript = finish_capture(rpc, config, session).await;
+    released.and(transcript)
 }
 
 /// The think stage: hand the prompt to the agent's goal loop. (Error strings

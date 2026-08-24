@@ -1,0 +1,20 @@
+# hotkey plugin config. Copy the relevant keys into the plugin's `env:` list
+# in the kernel config (or the drop-in's `env:`) — the supervisor exports
+# them before spawning. Every key is optional.
+
+# Backend: auto (default) tries the XDG GlobalShortcuts portal and falls
+# back to manual when no desktop portal answers; portal demands it; manual
+# never opens D-Bus — events come only via hotkey_inject.
+HOTKEY_PLUGIN_BACKEND=auto
+
+# Boot bindings: semicolon-separated id=TRIGGER pairs, operator spelling.
+# The daemon's push-to-talk expects a binding literally named "ptt".
+# An invalid spec is logged and skipped, not fatal.
+HOTKEY_PLUGIN_BINDINGS=ptt=Ctrl+Shift+Space
+
+# More examples:
+# HOTKEY_PLUGIN_BINDINGS=ptt=Super+X;mute=Ctrl+F8;next=Alt+Right
+
+# Secured-kernel only (operator mints per plugin; claims override manifest):
+# VEYRON_JWT_SECRET=<kernel jwt_secret>
+# VYN_JWT_TOKEN=<jwt with sub=hotkey, permissions=[PERMISSION_SYSTEM, PERMISSION_EVENT_PUBLISH]>

@@ -140,6 +140,25 @@ inbound PCM chunks fill it, and `stt_listen_stop` transcribes with the
 local sherpa model, publishes the transcript event, and returns the text.
 Requires `PERMISSION_AUDIO_STREAM` and `PERMISSION_EVENT_PUBLISH`.
 
+### Voice-activity events (opt-in)
+
+With `STT_PLUGIN_VAD=on`, every chunk also advances an energy VAD
+(per-chunk RMS with hysteresis) and the listen path publishes speech
+boundaries:
+
+| Namespaced event | Payload | Meaning |
+|---|---|---|
+| `plugin.stt.stt_speech_started` | `{"stream_id": N}` | two consecutive loud chunks opened an utterance |
+| `plugin.stt.stt_speech_ended` | `{"stream_id": N, "speech_ms": M}` | `SILENCE_MS` of quiet closed it after ≥ `MIN_SPEECH_MS` of speech |
+
+This is the endpoint orchestrators key on — the daemon's
+`DAEMON_PLUGIN_MODE=vad` ends a voice turn on `stt_speech_ended` instead
+of a fixed capture window. The VAD is deliberately primitive (it solves
+"when did the user stop talking", not speaker diaristics); all thresholds
+are env-tunable and it is off by default, so streams behave exactly as
+before unless enabled. Too-short blips reset quietly without an ending
+event.
+
 ## Configuration
 
 `stt` reads no config file itself — environment variables set in the

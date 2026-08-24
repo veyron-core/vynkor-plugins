@@ -40,10 +40,32 @@ as `notify` calling `tts_synthesize`).
 |---|---|---|
 | `daemon_enable` | `{}` | `{enabled: true}` — start the background listen loop |
 | `daemon_disable` | `{}` | `{enabled: false}` — stop the loop (an in-flight turn finishes) |
-| `daemon_status` | `{}` | `{enabled, busy, turns_completed, last_turn}` |
+| `daemon_status` | `{}` | `{enabled, busy, capturing, mode, turns_completed, last_turn}` |
 | `daemon_turn` | `{text?}` | run one voice cycle now; `text` skips mic/stt. See below |
 | `daemon_say` | `{text}` | synthesize + play text through tts + sound |
 | `daemon_ask` | `{prompt}` | agent round-trip; the answer is spoken aloud and returned |
+
+### Listen modes (`DAEMON_PLUGIN_MODE`)
+
+How a turn decides the user stopped talking:
+
+- **`window`** (default) — hold the mic for a fixed `DAEMON_PLUGIN_TURN_MS`
+  and take whatever was said. v0.1 behavior; predictable but rigid.
+- **`vad`** — open-ended capture: the turn ends when `stt` publishes its
+  speech-ended event (energy VAD behind `STT_PLUGIN_VAD=on`), i.e. when
+  you actually stop talking. Caps keep it safe:
+  `DAEMON_PLUGIN_VAD_WAIT_MS` (no speech at all → turn ends `silent`),
+  `DAEMON_PLUGIN_VAD_MAX_UTTERANCE_MS` (endpoint never fired → cut and
+  transcribe anyway). Enable once and talk whenever — "walk & talk".
+- **`ptt`** — push-to-talk with the [`hotkey`](../hotkey/) plugin: idle
+  until `hotkey_pressed` (matching `DAEMON_PLUGIN_PTT_BINDING`), capture
+  while held, end on `hotkey_released`, then think+speak as usual.
+  `DAEMON_PLUGIN_PTT_MAX_HOLD_MS` auto-releases a stuck key. Manual
+  `daemon_turn` in ptt mode falls back to window behavior — nobody is
+  holding a key programmatically.
+
+All three modes share one busy slot (the mic has one owner) and produce
+identical `turn.completed` events.
 
 ### The voice turn
 
@@ -51,7 +73,8 @@ One cycle of [`run_voice_turn`](src/lib.rs):
 
 1. `stt_listen_start` opens an accumulation buffer on `stream_id`.
 2. `mic_start {target: "stt", stream_id}` points the mic at it.
-3. The capture window elapses (`DAEMON_PLUGIN_TURN_MS`, default 6 s).
+3. The endpoint fires per mode: fixed window elapses / stt reports
+   silence-after-speech / hotkey released.
 4. `mic_stop` first — it flushes `end_of_stream` to stt — then
    `stt_listen_stop` transcribes the complete buffer.
 5. Empty transcript → done, `status: "silent"`. Nothing else runs.
@@ -71,7 +94,8 @@ The result publishes as a `turn.completed` event:
 `status` is `answered` | `silent` | `error`. Stage failures land in the
 payload (`status: "error"`, `error: "<stage> failed: …"`), never as
 ACTION_ERROR — a failed stage is a normal unattended-daemon outcome, not a
-malformed request.
+malformed request. If `mic_start` fails after `stt_listen_start`, the
+half-open buffer is still discarded (fail closed).
 
 ### Failure semantics per action
 
@@ -88,34 +112,45 @@ malformed request.
 Both are best-effort, published after the response (database's contract):
 
 - `plugin.daemon.turn.completed` — every finished turn (see above), from
-  both manual `daemon_turn` and the background loop.
+  manual `daemon_turn`, the background loop, and ptt turns alike.
 - `plugin.daemon.state.changed` — `{"enabled": true|false}` on enable/disable.
+
+Inbound, the daemon subscribes to `stt_speech_started`/`_ended` (vad mode)
+and `hotkey_pressed`/`hotkey_released` (ptt mode); subscribing in window
+mode is harmless — events arrive and drop unread.
 
 ## Concurrency architecture
 
 Single-reader select loop + channel-fronted RPC proxy + spawned tasks —
 the calendar/sync-client pattern (`docs/PLUGIN_AUTHORING.md` §1). The serve
-loop exclusively owns the `VynkorClient`; handler tasks and the timer-driven
-turn task reach mic/stt/agent/tts/sound through the `Rpc` proxy channel, so
-a turn started by a tick can never eat an inbound user request
-(`send_action`'s discard-while-waiting would). Loop state (enabled/busy/
-counter/last turn) lives behind atomics + small mutex slots in
+loop exclusively owns the `VynkorClient`; handler tasks, the timer-driven
+turn task and the ptt event task reach mic/stt/agent/tts/sound through the
+`Rpc` proxy channel, so a turn started by a tick can never eat an inbound
+user request (`send_action`'s discard-while-waiting would). Kernel events
+forward onto an in-process broadcast bus that the vad listen stage and the
+ptt task subscribe to. Loop state (enabled/busy/capturing/counter/last
+turn) lives behind atomics + small mutex slots in
 [`DaemonState`](src/lib.rs) — no `.await` while holding a guard.
 
 ## Testing
 
-`cargo test` — 9 unit tests over request parsing/validation, plus 14 e2e
+`cargo test` — 9 unit tests over request parsing/validation plus 20 e2e
 tests driving the real serve loop against a fake kernel over
 `UnixStream::pair` (registration handshake asserting the declared
 permissions, scripted mic/stt/agent/tts/sound stand-ins recording every
-outbound call in arrival order): full-pipeline order, text-bypass turn,
-silent turn, per-stage failure routing (payload vs ACTION_ERROR), busy-slot
-rejection, and enable/disable loop ticks. No live kernel, no audio hardware.
+outbound call in arrival order, kernel-event injection for the vad/ptt
+feeds): full-pipeline order per mode, text-bypass turn, silent turn,
+vad-mode endpointing (speech-ended ends the turn; no speech → clean
+timeout), ptt press/release lifecycle, disabled/wrong-binding presses
+ignored, stuck-key max-hold release freeing the busy slot, per-stage
+failure routing (payload vs ACTION_ERROR), busy-slot rejection, and
+enable/disable loop ticks. No live kernel, no audio hardware.
 
 ## Status
 
-v0.1. Depends on `mic`, `stt`, `agent`, `tts` and `sound` being registered;
+v0.2. Depends on `mic`, `stt`, `agent`, `tts` and `sound` being registered;
 the daemon degrades per-stage (see `USAGE.md` errors) but needs all five for
-a full answered turn. Always-on lifecycle comes free from the kernel's
-drop-in auto-spawn (R10-01/R10-04) — no kernel change was ever needed (root
-`ROADMAP.md`).
+a full answered turn. vad mode additionally wants `STT_PLUGIN_VAD=on` on
+the stt side; ptt mode wants the `hotkey` plugin with a matching binding.
+Always-on lifecycle comes free from the kernel's drop-in auto-spawn
+(R10-01/R10-04) — no kernel change was ever needed (root `ROADMAP.md`).

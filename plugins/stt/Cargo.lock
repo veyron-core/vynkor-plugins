@@ -175,7 +175,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -774,7 +774,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -948,8 +948,8 @@ dependencies = [
  "serde_json",
  "sherpa-onnx",
  "tokio",
- "veyron-sdk",
- "veyron-wire",
+ "vynkor-sdk",
+ "vynkor-wire",
 ]
 
 [[package]]
@@ -1012,7 +1012,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1166,10 +1166,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "veyron-sdk"
-version = "0.1.6"
+name = "vynkor-sdk"
+version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6de4276c427c11f6cc5f550cf3d5b61cf5e844a8ff55f722cdb61c468d65efb"
+checksum = "dc02f9f9deff67c809fde0847364cd5726b8b7649d91c8bc8aff9f328a3206c4"
 dependencies = [
  "crc32fast",
  "futures-util",
@@ -1177,14 +1177,14 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-tungstenite",
- "veyron-wire",
+ "vynkor-wire",
 ]
 
 [[package]]
-name = "veyron-wire"
-version = "0.2.3"
+name = "vynkor-wire"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57d839f3d759fb0ba8cfe08e871804a7f18fd18e92d63926cb2731f7f3b5ecf3"
+checksum = "2e9f4eb057c7b8710ef73eb259584f741ff6f99dfb8b8f4b2eb1b589c36fe025"
 dependencies = [
  "crc32fast",
  "hkdf",

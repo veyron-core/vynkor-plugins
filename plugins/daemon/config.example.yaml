@@ -6,8 +6,30 @@
 # runtime via daemon_enable instead).
 DAEMON_PLUGIN_ENABLED=false
 
-# Voice turn shape: mic capture window and idle gap between loop turns.
+# Listen mode — how a turn decides the user stopped talking:
+#   window (default) — fixed capture window below; v0.1 behavior.
+#   vad              — capture ends on stt's speech-ended event (needs
+#                      STT_PLUGIN_VAD=on on the stt side). Hands-free:
+#                      enable once, talk whenever. Falls back to window
+#                      behavior if stt's VAD never fires (caps below).
+#   ptt              — push-to-talk via the hotkey plugin: idle until
+#                      hotkey_pressed, capture while held, end on release.
+DAEMON_PLUGIN_MODE=window
+
+# window mode: mic capture window per turn.
 DAEMON_PLUGIN_TURN_MS=6000
+
+# vad mode: give up when no speech starts within this budget (turn ends
+# "silent"), and hard-cap one utterance even without an ended event.
+DAEMON_PLUGIN_VAD_WAIT_MS=30000
+DAEMON_PLUGIN_VAD_MAX_UTTERANCE_MS=20000
+
+# ptt mode: which hotkey binding triggers a turn (hotkey plugin's binding
+# id), and the stuck-key auto-release cap.
+DAEMON_PLUGIN_PTT_BINDING=ptt
+DAEMON_PLUGIN_PTT_MAX_HOLD_MS=60000
+
+# Idle gap between loop turns (all modes; ptt ticks stay idle regardless).
 DAEMON_PLUGIN_GAP_MS=2000
 
 # Capture parameters negotiated with stt_listen_start / mic_start.

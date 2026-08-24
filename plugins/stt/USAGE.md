@@ -182,6 +182,23 @@ buffered`). Requires `PERMISSION_AUDIO_STREAM` (to receive the chunks) and
 `PERMISSION_EVENT_PUBLISH` (to publish the transcript). Local (`sherpa`)
 only — the listen path has no cloud provider.
 
+### Voice-activity events (opt-in, `STT_PLUGIN_VAD=on`)
+
+While a stream accumulates, an energy VAD publishes boundaries as
+best-effort events:
+
+| Namespaced event | Payload | Meaning |
+|---|---|---|
+| `plugin.stt.stt_speech_started` | `{"stream_id": 1}` | two consecutive above-threshold chunks opened an utterance |
+| `plugin.stt.stt_speech_ended` | `{"stream_id": 1, "speech_ms": 900}` | `STT_PLUGIN_VAD_SILENCE_MS` of quiet closed it after ≥ `STT_PLUGIN_VAD_MIN_SPEECH_MS` of speech |
+
+Transcription is unchanged — `stt_listen_stop` always transcribes the
+whole buffer regardless of VAD state; the events exist so orchestrators
+(the daemon's vad mode) can end turns when the user actually stops talking.
+Knobs: `STT_PLUGIN_VAD` (`on`), `STT_PLUGIN_VAD_RMS_THRESHOLD` (500),
+`STT_PLUGIN_VAD_SILENCE_MS` (1200), `STT_PLUGIN_VAD_MIN_SPEECH_MS` (240).
+Too-short blips reset quietly without an ending event.
+
 ## Errors
 
 Any failure returns `ACTION_ERROR` with a human-readable `error` string.

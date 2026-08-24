@@ -19,17 +19,18 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use daemon_plugin::{
-    event_envelope, handle_action, ChangeEvent, Config, DaemonState, Rpc, RpcCall,
+    event_envelope, handle_action, ptt_task, run_voice_turn, Bus, ChangeEvent, Config,
+    DaemonState, Rpc, RpcCall,
 };
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use vynkor_sdk::proto::{
-    envelope, ActionRequest, ActionResponse, ActionStatus, Envelope, PluginManifest, Pong,
+    envelope, ActionRequest, ActionResponse, ActionStatus, Envelope, Event, PluginManifest, Pong,
 };
 use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "daemon";
-const PLUGIN_VERSION: &str = "0.1.0";
+const PLUGIN_VERSION: &str = "0.2.0";
 const ACTIONS: [&str; 6] = [
     "daemon_enable",
     "daemon_disable",
@@ -77,6 +78,15 @@ fn action_response(
     }
 }
 
+/// Push one kernel event onto the in-process bus for the vad/ptt listen
+/// stages. Malformed payloads become `Value::Null` — subscribers filter by
+/// event type first, so a broken payload just never matches.
+fn forward_event(bus: &Bus, event: &Event) {
+    let payload =
+        serde_json::from_slice::<Value>(&event.payload_json).unwrap_or(Value::Null);
+    bus.send(&event.event_type, payload);
+}
+
 async fn serve(mut client: VynkorClient, config: Config) -> Result<(), VynkorError> {
     let jwt_token = std::env::var("VYN_JWT_TOKEN").unwrap_or_default();
     let ack = client
@@ -91,17 +101,43 @@ async fn serve(mut client: VynkorClient, config: Config) -> Result<(), VynkorErr
 
     println!("[{PLUGIN_ID}] registered with kernel");
     println!(
-        "[{PLUGIN_ID}] listen loop {} (turn window {} ms, gap {} ms)",
+        "[{PLUGIN_ID}] listen loop {} (mode {}, turn window {} ms, gap {} ms)",
         if config.enabled_at_boot { "on" } else { "off (daemon_enable to start)" },
+        config.mode.as_str(),
         config.turn_ms,
         config.gap_ms
     );
 
+    // The daemon reacts to other plugins' events: stt's VAD boundaries
+    // drive vad-mode turns, hotkey press/release drives ptt turns.
+    // Subscribing unconditionally is harmless in window mode — the kernel
+    // just delivers a few extra events the bus drops unread.
+    let event_types = [
+        daemon_plugin::EV_SPEECH_STARTED.to_string(),
+        daemon_plugin::EV_SPEECH_ENDED.to_string(),
+        daemon_plugin::EV_HOTKEY_PRESSED.to_string(),
+        daemon_plugin::EV_HOTKEY_RELEASED.to_string(),
+    ];
+    if let Err(e) = client.subscribe(event_types.to_vec()).await {
+        eprintln!("[{PLUGIN_ID}] subscribe failed (events unavailable): {e}");
+    }
+
     let config = Arc::new(config);
     let state = Arc::new(DaemonState::new(config.enabled_at_boot));
+    let bus = Bus::new();
     let (outbound_tx, mut outbound_rx) = mpsc::channel::<Envelope>(64);
     let (rpc_tx, mut rpc_rx) = mpsc::channel::<RpcCall>(64);
     let rpc = Rpc::new(rpc_tx);
+
+    if config.mode == daemon_plugin::ListenMode::Ptt {
+        tokio::spawn(ptt_task(
+            rpc.clone(),
+            Arc::clone(&state),
+            config.as_ref().clone(),
+            bus.clone(),
+            outbound_tx.clone(),
+        ));
+    }
 
     let mut pending: HashMap<String, (String, oneshot::Sender<Result<Value, String>>)> =
         HashMap::new();
@@ -132,9 +168,7 @@ async fn serve(mut client: VynkorClient, config: Config) -> Result<(), VynkorErr
                     }
                     Some(envelope::Payload::PluginShutdown(_)) => break,
                     Some(envelope::Payload::Event(event)) => {
-                        // The daemon declares no subscriptions; ack
-                        // defensively so the kernel doesn't retry anything
-                        // unexpectedly delivered.
+                        forward_event(&bus, &event);
                         let _ = client.ack_event(&event.event_id).await;
                     }
                     Some(envelope::Payload::EventPublishAck(_)) => {
@@ -145,6 +179,7 @@ async fn serve(mut client: VynkorClient, config: Config) -> Result<(), VynkorErr
                         let out = outbound_tx.clone();
                         let config = Arc::clone(&config);
                         let state = Arc::clone(&state);
+                        let bus = bus.clone();
                         tokio::spawn(async move {
                             match handle_action(
                                 rpc,
@@ -152,6 +187,7 @@ async fn serve(mut client: VynkorClient, config: Config) -> Result<(), VynkorErr
                                 &config,
                                 &req.action,
                                 &req.params_json,
+                                Some(&bus),
                             )
                             .await
                             {
@@ -222,7 +258,12 @@ async fn serve(mut client: VynkorClient, config: Config) -> Result<(), VynkorErr
             _ = interval.tick() => {
                 // Opt-in background loop: a tick only starts a turn when the
                 // operator enabled it and no turn is already running (the mic
-                // has one owner). Manual `daemon_turn` claims the same slot.
+                // has one owner). In ptt mode turns are event-driven — the
+                // tick stays out of the way. Manual `daemon_turn` claims the
+                // same slot.
+                if config.mode == daemon_plugin::ListenMode::Ptt {
+                    continue;
+                }
                 if !state.enabled() || !state.try_begin_turn() {
                     continue;
                 }
@@ -230,10 +271,10 @@ async fn serve(mut client: VynkorClient, config: Config) -> Result<(), VynkorErr
                 let out = outbound_tx.clone();
                 let state = Arc::clone(&state);
                 let config = Arc::clone(&config);
+                let bus = bus.clone();
                 tokio::spawn(async move {
-                    let result =
-                        daemon_plugin::run_voice_turn(&rpc, state.clone(), &config, None)
-                            .await;
+                    let result = run_voice_turn(&rpc, state.clone(), &config, None, Some(&bus))
+                        .await;
                     state.end_turn(&result);
                     let ev = ChangeEvent { event_type: "turn.completed", payload: result };
                     let _ = out.send(event_envelope(&ev)).await;
@@ -256,6 +297,7 @@ async fn main() -> Result<(), VynkorError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::future::Future;
     use std::time::Duration;
     use tokio::net::UnixStream;
     use tokio::sync::Mutex;
@@ -304,19 +346,55 @@ mod tests {
     enum Cmd {
         Call { action: String, params: Value, reply: oneshot::Sender<Result<Value, String>> },
         Tweak(fn(&mut Script)),
+        InjectEvent { event_type: String, payload: Value },
     }
 
     impl Shim {
         async fn call(&self, action: &str, params: Value) -> Result<Value, String> {
+            self.call_async(action, params).await
+        }
+
+        /// Dispatch without awaiting the plugin's reply — for tests that
+        /// drive a turn's event feed WHILE the turn is in flight.
+        fn call_async(
+            &self,
+            action: &str,
+            params: Value,
+        ) -> impl Future<Output = Result<Value, String>> + Send + 'static {
             let (reply_tx, reply_rx) = oneshot::channel();
+            let tx = self.tx.clone();
+            let action = action.to_string();
+            async move {
+                tx.send(Cmd::Call { action, params, reply: reply_tx })
+                    .await
+                    .expect("shim loop died");
+                tokio::time::timeout(Duration::from_secs(10), reply_rx)
+                    .await
+                    .expect("timed out waiting for plugin reply")
+                    .expect("shim dropped reply channel")
+            }
+        }
+
+        /// Deliver one kernel event into the plugin connection, exactly as
+        /// the kernel would for a subscribed type.
+        async fn inject_event(&self, event_type: &str, payload: Value) {
             self.tx
-                .send(Cmd::Call { action: action.into(), params, reply: reply_tx })
+                .send(Cmd::InjectEvent { event_type: event_type.into(), payload })
                 .await
                 .expect("shim loop died");
-            tokio::time::timeout(Duration::from_secs(10), reply_rx)
-                .await
-                .expect("timed out waiting for plugin reply")
-                .expect("shim dropped reply channel")
+        }
+
+        /// Poll until the plugin has issued `action` at least `n` times —
+        /// synchronizes an in-flight turn's progress before injecting the
+        /// next stimulus.
+        async fn wait_for_calls(&self, action: &str, n: usize) {
+            for _ in 0..250 {
+                if self.params_of(action).await.len() >= n {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            panic!("plugin never called {action} ×{n}");
         }
 
         /// Mutate the failure/transcript script between test phases.
@@ -592,6 +670,19 @@ mod tests {
                             let mut guard = script.lock().await;
                             f(&mut guard);
                         }
+                        Some(Cmd::InjectEvent { event_type, payload }) => {
+                            seq += 1;
+                            let env = Envelope {
+                                payload: Some(envelope::Payload::Event(Event {
+                                    event_id: format!("ev-{seq}"),
+                                    event_type,
+                                    payload_json: serde_json::to_vec(&payload).unwrap(),
+                                    retry_count: 0,
+                                })),
+                                ..Default::default()
+                            };
+                            let _ = kernel.send("daemon", env).await;
+                        }
                         None => break,
                     }
                 }
@@ -624,6 +715,25 @@ mod tests {
             ..Config::default()
         }
     }
+
+    fn vad_config() -> Config {
+        Config {
+            mode: daemon_plugin::ListenMode::Vad,
+            vad_wait_ms: 5_000,
+            vad_max_utterance_ms: 2_000,
+            ..fast_config()
+        }
+    }
+
+    fn ptt_config() -> Config {
+        Config {
+            mode: daemon_plugin::ListenMode::Ptt,
+            ptt_binding: "ptt".into(),
+            ptt_max_hold_ms: 5_000,
+            ..fast_config()
+        }
+    }
+
 
     #[tokio::test]
     async fn say_speaks_via_tts_then_sound() {
@@ -826,9 +936,167 @@ mod tests {
         assert_eq!(resp["status"], "error");
         assert!(resp["error"].as_str().unwrap().contains("mic_start"));
 
-        // No capture → nothing buffered → the stop stages must not run.
+        // The capture failed, so nothing is transcribed — but the half-open
+        // stt buffer IS discarded (fail closed), which surfaces as a
+        // stt_listen_stop call that returns no text.
+        let stops: Vec<Value> = shim.params_of("stt_listen_stop").await;
+        assert_eq!(stops.len(), 1, "buffer must be discarded exactly once");
+        assert_eq!(stops[0]["stream_id"], 7);
+    }
+
+    #[tokio::test]
+    async fn vad_mode_turn_ends_on_the_speech_ended_event() {
+        let shim = start_plugin(vad_config()).await;
+
+        let shim2 = shim.clone();
+        let turn = tokio::spawn(async move {
+            shim2.call("daemon_turn", serde_json::json!({})).await
+        });
+        // Drive the event feed while the turn is in flight: wait for the
+        // capture to open, then play speech start + end off the bus.
+        shim.wait_for_calls("mic_start", 1).await;
+        shim.inject_event(
+            daemon_plugin::EV_SPEECH_STARTED,
+            serde_json::json!({"stream_id": 7}),
+        )
+        .await;
+        shim.inject_event(
+            daemon_plugin::EV_SPEECH_ENDED,
+            serde_json::json!({"stream_id": 7, "speech_ms": 900}),
+        )
+        .await;
+
+        let resp = turn.await.expect("turn task joined").expect("vad turn must reply");
+        assert_eq!(resp["status"], "answered");
+        assert_eq!(resp["transcript"], "what time is it");
+        assert_eq!(resp["spoken"], true);
+
+        let mics = shim.params_of("mic_start").await;
+        assert_eq!(mics.len(), 1, "exactly one capture per vad turn");
+
         let names = shim.names().await;
-        assert!(!names.contains(&"stt_listen_stop".to_string()), "names: {names:?}");
+        for stage in ["stt_listen_start", "mic_start", "mic_stop", "stt_listen_stop"] {
+            assert!(names.contains(&stage.to_string()), "{stage} missing: {names:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn vad_mode_turn_times_out_silently_without_speech() {
+        let mut cfg = vad_config();
+        cfg.vad_wait_ms = 300;
+        let shim = start_plugin(cfg).await;
+        // No speech on the bus AND an empty transcript from stt — exactly
+        // what a real silent window produces.
+        shim.tweak(|s| s.transcript = "   ".to_string()).await;
+
+        let resp = shim.call("daemon_turn", serde_json::json!({})).await.unwrap();
+        assert_eq!(resp["status"], "silent");
+
+        // The timed-out capture must still be closed cleanly.
+        let names = shim.names().await;
+        assert!(names.contains(&"mic_stop".to_string()), "names: {names:?}");
+        assert!(names.contains(&"stt_listen_stop".to_string()), "names: {names:?}");
+        assert!(!names.contains(&"goal_start".to_string()), "names: {names:?}");
+    }
+
+    #[tokio::test]
+    async fn ptt_turn_runs_between_press_and_release() {
+        let shim = start_plugin(ptt_config()).await;
+        shim.call("daemon_enable", serde_json::json!({})).await.unwrap();
+
+        shim.inject_event(
+            daemon_plugin::EV_HOTKEY_PRESSED,
+            serde_json::json!({"binding": "ptt"}),
+        )
+        .await;
+        shim.wait_for_calls("mic_start", 1).await;
+        shim.inject_event(
+            daemon_plugin::EV_HOTKEY_RELEASED,
+            serde_json::json!({"binding": "ptt"}),
+        )
+        .await;
+
+        let event = wait_for_published(&shim, |(t, p)| {
+            t == "turn.completed" && p["status"] == "answered"
+        })
+        .await
+        .expect("ptt turn must publish its outcome");
+        assert_eq!(event.1["transcript"], "what time is it");
+        assert_eq!(event.1["answer"], "It is noon.");
+
+        // One clean capture cycle, driven purely by events.
+        assert_eq!(shim.params_of("mic_start").await.len(), 1);
+        assert_eq!(shim.params_of("mic_stop").await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn ptt_press_while_disabled_or_busy_is_ignored() {
+        let shim = start_plugin(ptt_config()).await;
+
+        // Disabled: a press must not touch the mic at all.
+        shim.inject_event(
+            daemon_plugin::EV_HOTKEY_PRESSED,
+            serde_json::json!({"binding": "ptt"}),
+        )
+        .await;
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(
+            shim.params_of("mic_start").await.is_empty(),
+            "disabled daemon must not capture"
+        );
+
+        // Enabled, but the binding id doesn't match → still ignored.
+        shim.call("daemon_enable", serde_json::json!({})).await.unwrap();
+        shim.inject_event(
+            daemon_plugin::EV_HOTKEY_PRESSED,
+            serde_json::json!({"binding": "other-key"}),
+        )
+        .await;
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(shim.params_of("mic_start").await.is_empty(), "wrong binding must not capture");
+    }
+
+    #[tokio::test]
+    async fn ptt_stuck_key_auto_releases_at_max_hold() {
+        let mut cfg = ptt_config();
+        cfg.ptt_max_hold_ms = 400;
+        let shim = start_plugin(cfg).await;
+        shim.call("daemon_enable", serde_json::json!({})).await.unwrap();
+
+        shim.inject_event(
+            daemon_plugin::EV_HOTKEY_PRESSED,
+            serde_json::json!({"binding": "ptt"}),
+        )
+        .await;
+        shim.wait_for_calls("mic_start", 1).await;
+
+        // No release ever comes — the cap must close the turn as an error
+        // payload (not an action error) and free the busy slot.
+        let event = wait_for_published(&shim, |(t, p)| {
+            t == "turn.completed" && p["status"] == "error"
+        })
+        .await
+        .expect("max-hold turn must publish its outcome");
+        assert!(
+            event.1["error"].as_str().unwrap().contains("release"),
+            "error was: {:?}",
+            event.1["error"]
+        );
+
+        // Slot freed: a follow-up manual turn goes through.
+        let resp = shim.call("daemon_turn", serde_json::json!({"text": "ping"})).await;
+        assert!(resp.is_ok(), "busy slot must be free after max-hold release");
+    }
+
+    #[test]
+    fn listen_mode_parses_and_renders() {
+        use daemon_plugin::ListenMode;
+        assert_eq!(ListenMode::parse("window"), Some(ListenMode::Window));
+        assert_eq!(ListenMode::parse(" VAD "), Some(ListenMode::Vad));
+        assert_eq!(ListenMode::parse("ptt"), Some(ListenMode::Ptt));
+        assert_eq!(ListenMode::parse("voice"), None);
+        assert_eq!(ListenMode::default().as_str(), "window");
+        assert_eq!(ListenMode::Ptt.as_str(), "ptt");
     }
 
     #[tokio::test]
