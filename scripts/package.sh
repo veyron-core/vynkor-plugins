@@ -202,7 +202,10 @@ cp "$manifest" "$version_dir/plugin.json"
 sha256=$(sha256sum "$archive_path" | awk '{print $1}')
 printf '%s  %s\n' "$sha256" "$archive_name" > "$version_dir/checksum.sha256"
 
-archive_url="https://raw.githubusercontent.com/vynkor-core/vynkor-plugins/main/dist/$slug/versions/$version/$archive_name"
+# relative archive_url — vynm/kernel resolve it against the registry's own
+# base URL, so host migration (github → R2 → custom domain) never breaks
+# signatures (the S1 message covers archive_url as written)
+archive_url="dist/$slug/versions/$version/$archive_name"
 source_url="https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/$plugin_dir_name"
 
 # ---- signing (optional) ----------------------------------------------------
@@ -247,7 +250,7 @@ derived_hex = public_key.public_bytes(
     encoding=serialization.Encoding.Raw,
     format=serialization.PublicFormat.Raw,
 ).hex()
-PINNED = "ed8c39a19dcbfed1a3a436b914a8ce9bf2b449c534808ce92c78adcfa2590928"
+PINNED = "6ee352d706eaf5b5114a1252fb76bb8a2bfbf177b0e4c8e9c21f73b9019083ee"
 if derived_hex != PINNED:
     print(
         f"warning: signing key public key {derived_hex} does not match the "
