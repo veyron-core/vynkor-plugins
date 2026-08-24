@@ -1,0 +1,30 @@
+# agent plugin config. Every key is optional and read from the plugin's
+# `env:` list in the kernel config (see README.md for the drop-in example).
+
+# --- Tools (what the agent may call) ----------------------------------------
+# Comma-separated exact action names the model may dispatch. DEFAULT-DENY:
+# unset/empty means no tools at all.
+AGENT_PLUGIN_ALLOWED_ACTIONS=notify_send,fs_list,fs_read,media_status,launch
+
+# Tool descriptions/schemas come from the plugins' registered manifests
+# automatically (kernel list_plugins/get_manifest — read-only, no admin
+# permission needed). An optional curated file overrides per name:
+# {"tools": [{"name": "notify_send", "description": "...",
+#             "parameters": {"type":"object"},
+#             "requires_confirmation": false, "timeout_ms": 30000}]}
+AGENT_PLUGIN_TOOLS_FILE=~/.config/vyn/agent-tools.json
+# Disable manifest discovery (static catalog only):
+# AGENT_PLUGIN_DISCOVERY=off
+
+# --- LLM defaults (routed through the ai plugin's chat_completion) ----------
+AGENT_PLUGIN_AI_PROVIDER=openai            # anthropic | openai
+AGENT_PLUGIN_AI_BASE_URL=http://localhost:11434/v1   # OpenAI-compatible (Ollama here)
+AGENT_PLUGIN_AI_MODEL=qwen3:8b
+AGENT_PLUGIN_AI_API_KEY_ENV=OPENAI_API_KEY # handle only; must be on ai's AI_PLUGIN_ALLOWED_KEY_ENVS; vault-first via secrets
+# Profile mode instead of explicit provider/model/key:
+# AGENT_PLUGIN_AI_AGENT_ID=host-assistant
+AGENT_PLUGIN_AI_MAX_TOKENS=1024
+
+# --- Loop -------------------------------------------------------------------
+AGENT_PLUGIN_MAX_STEPS=6        # default loop budget per goal (1..=16)
+AGENT_PLUGIN_DB_TIMEOUT_MS=5000 # per-call timeout for database round-trips
