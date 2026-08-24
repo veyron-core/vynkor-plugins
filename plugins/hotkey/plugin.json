@@ -1,14 +1,23 @@
 {
   "plugin_id": "hotkey",
   "version": "0.1.0",
-  "permissions": ["PERMISSION_SYSTEM", "PERMISSION_EVENT_PUBLISH"],
+  "permissions": [
+    "PERMISSION_SYSTEM",
+    "PERMISSION_EVENT_PUBLISH"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "hotkey",
-  "events": ["hotkey_pressed", "hotkey_released"],
-  "files": ["hotkey", "plugin.json"],
+  "events": [
+    "hotkey_pressed",
+    "hotkey_released"
+  ],
+  "files": [
+    "hotkey",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "hotkey_bind",
@@ -16,22 +25,57 @@
       "input": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "pattern": "^[a-z0-9_.-]{1,64}$", "description": "Stable binding id consumers subscribe by (the daemon's DAEMON_PLUGIN_PTT_BINDING must match one). Re-binding an existing id replaces its trigger in place." },
-          "trigger": { "type": "string", "maxLength": 64, "description": "Key combo in operator spelling: MOD+MOD+KEY with Ctrl/Control, Super/Meta/Logo/Win, Alt, Shift modifiers and one non-modifier key (letters, digits, F1-F35, space, enter, arrows, XF86Audio* names, punctuation). Normalized to the XDG portal form at bind time." },
-          "description": { "type": "string", "maxLength": 200, "description": "Human label surfaced in desktop portal UIs and hotkey_list. Defaults to \"hotkey <id>\"." }
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_.-]{1,64}$",
+            "description": "Stable binding id consumers subscribe by (the daemon's DAEMON_PLUGIN_PTT_BINDING must match one). Re-binding an existing id replaces its trigger in place."
+          },
+          "trigger": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Key combo in operator spelling: MOD+MOD+KEY with Ctrl/Control, Super/Meta/Logo/Win, Alt, Shift modifiers and one non-modifier key (letters, digits, F1-F35, space, enter, arrows, XF86Audio* names, punctuation). Normalized to the XDG portal form at bind time."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Human label surfaced in desktop portal UIs and hotkey_list. Defaults to \"hotkey <id>\"."
+          }
         },
-        "required": ["id", "trigger"],
+        "required": [
+          "id",
+          "trigger"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "bound": { "type": "boolean", "const": true },
-          "id": { "type": "string" },
-          "trigger": { "type": "string", "description": "Normalized portal-form trigger actually bound (e.g. \"CTRL+SHIFT+space\")." },
-          "backend": { "type": "string", "enum": ["portal", "manual"], "description": "portal = OS-level combo is live; manual = stored for inject/compositor wiring only." }
+          "bound": {
+            "type": "boolean",
+            "const": true
+          },
+          "id": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string",
+            "description": "Normalized portal-form trigger actually bound (e.g. \"CTRL+SHIFT+space\")."
+          },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "manual"
+            ],
+            "description": "portal = OS-level combo is live; manual = stored for inject/compositor wiring only."
+          }
         },
-        "required": ["bound", "id", "trigger", "backend"],
+        "required": [
+          "bound",
+          "id",
+          "trigger",
+          "backend"
+        ],
         "additionalProperties": false
       }
     },
@@ -41,24 +85,37 @@
       "input": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "minLength": 1, "description": "Binding id to remove." }
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Binding id to remove."
+          }
         },
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "unbound": { "type": "boolean", "description": "False (not an error) when the id was already absent — unbind is idempotent like every stop primitive in this repo." },
-          "id": { "type": "string" }
+          "unbound": {
+            "type": "boolean",
+            "description": "False (not an error) when the id was already absent \u2014 unbind is idempotent like every stop primitive in this repo."
+          },
+          "id": {
+            "type": "string"
+          }
         },
-        "required": ["unbound", "id"],
+        "required": [
+          "unbound",
+          "id"
+        ],
         "additionalProperties": false
       }
     },
     {
       "name": "hotkey_list",
-      "permission": "",
       "input": {
         "type": "object",
         "properties": {},
@@ -67,29 +124,51 @@
       "output": {
         "type": "object",
         "properties": {
-          "backend": { "type": "string", "enum": ["portal", "manual"] },
-          "count": { "type": "integer", "minimum": 0 },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "manual"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
           "bindings": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "id": { "type": "string" },
-                "trigger": { "type": "string" },
-                "description": { "type": "string" }
+                "id": {
+                  "type": "string"
+                },
+                "trigger": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
               },
-              "required": ["id", "trigger", "description"],
+              "required": [
+                "id",
+                "trigger",
+                "description"
+              ],
               "additionalProperties": false
             }
           }
         },
-        "required": ["backend", "count", "bindings"],
+        "required": [
+          "backend",
+          "count",
+          "bindings"
+        ],
         "additionalProperties": false
       }
     },
     {
       "name": "hotkey_status",
-      "permission": "",
       "input": {
         "type": "object",
         "properties": {},
@@ -98,10 +177,22 @@
       "output": {
         "type": "object",
         "properties": {
-          "backend": { "type": "string", "enum": ["portal", "manual"] },
-          "count": { "type": "integer", "minimum": 0 }
+          "backend": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "manual"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
-        "required": ["backend", "count"],
+        "required": [
+          "backend",
+          "count"
+        ],
         "additionalProperties": false
       }
     },
@@ -111,20 +202,48 @@
       "input": {
         "type": "object",
         "properties": {
-          "binding": { "type": "string", "minLength": 1, "description": "Binding id the event is attributed to. Does NOT need to be registered — inject is the manual backend's event source." },
-          "state": { "type": "string", "enum": ["pressed", "released"] }
+          "binding": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Binding id the event is attributed to. Does NOT need to be registered \u2014 inject is the manual backend's event source."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pressed",
+              "released"
+            ]
+          }
         },
-        "required": ["binding", "state"],
+        "required": [
+          "binding",
+          "state"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "published": { "type": "boolean", "const": true },
-          "binding": { "type": "string" },
-          "state": { "type": "string", "enum": ["pressed", "released"] }
+          "published": {
+            "type": "boolean",
+            "const": true
+          },
+          "binding": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pressed",
+              "released"
+            ]
+          }
         },
-        "required": ["published", "binding", "state"],
+        "required": [
+          "published",
+          "binding",
+          "state"
+        ],
         "additionalProperties": false
       }
     }
@@ -135,13 +254,17 @@
     "properties": {
       "HOTKEY_PLUGIN_BACKEND": {
         "type": "string",
-        "enum": ["auto", "portal", "manual"],
+        "enum": [
+          "auto",
+          "portal",
+          "manual"
+        ],
         "description": "auto (default) tries the XDG GlobalShortcuts portal and degrades to manual when no desktop portal answers; portal demands it; manual never touches D-Bus."
       },
       "HOTKEY_PLUGIN_BINDINGS": {
         "type": "string",
         "minLength": 1,
-        "description": "Boot bindings, semicolon-separated id=TRIGGER pairs in operator spelling (\"ptt=Ctrl+Shift+Space;mute=Super+F9\"). An invalid spec is logged and skipped — the plugin stays up with an empty store."
+        "description": "Boot bindings, semicolon-separated id=TRIGGER pairs in operator spelling (\"ptt=Ctrl+Shift+Space;mute=Super+F9\"). An invalid spec is logged and skipped \u2014 the plugin stays up with an empty store."
       }
     },
     "additionalProperties": true

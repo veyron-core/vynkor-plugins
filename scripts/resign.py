@@ -93,7 +93,8 @@ def collect_plan(registry: dict) -> list:
             fail(f"{slug}: no versions registered")
         for version in sorted(versions):
             ve = versions[version]
-            zip_name = Path(ve.get("archive_url", "")).name
+            # cache-busted urls carry "?v=" — the local zip keeps the bare name
+            zip_name = Path(ve.get("archive_url", "").split("?")[0]).name
             if not zip_name:
                 fail(f"{slug}@{version}: version entry has no archive_url")
             zip_path = DIST_DIR / slug / "versions" / version / zip_name

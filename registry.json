@@ -15,9 +15,9 @@
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/agent",
     "versions": {
       "0.1.0": {
-        "archive_url": "dist/agent/versions/0.1.0/agent-0.1.0.zip",
-        "sha256": "ff7684e2fcef427e8a3ee45c37bb4975b3976f59dd9f4ef245d1c4ddca57044c",
-        "signature": "f0d2512e6298e96fa8f968877c33fee256c3d573145a75170ca2c9e26e9a7bbbf284f9051a5476e592988cef5dcb61823011946aa241b2b1aff6f764ef596204",
+        "archive_url": "dist/agent/versions/0.1.0/agent-0.1.0.zip?v=2",
+        "sha256": "dbe864a41bb91b8d8569893ddcbeca8e721062c6e185db71eb53ca504f9c4afb",
+        "signature": "b91e6b893b517a7f0d59b9aa93ca20fdfbb01998f7519f52d0a2b5390fe961ee3bd197694daed0d45a1d1c2463a6be83144ef818b902acc6d75d0df8f38a7a01",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -187,9 +187,9 @@
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/hotkey",
     "versions": {
       "0.1.0": {
-        "archive_url": "dist/hotkey/versions/0.1.0/hotkey-0.1.0.zip",
-        "sha256": "4714edaf6ee2f403d4322e879bc47e23005c93e73b45fd2932a9aae46516bdde",
-        "signature": "11879718dd1a32619470664e8fd29b840c0c4859cfc5d4576eae83c901fb58ed75aba30dc13b7c7a375fef94027627abc5c8a4cfccf7516e9c04368023e31701",
+        "archive_url": "dist/hotkey/versions/0.1.0/hotkey-0.1.0.zip?v=2",
+        "sha256": "8aa652fe171b21c2f739201c999352db06c704ac9a4cfb531522221cc247f838",
+        "signature": "826ecf1fe7d3164954336585d5896b03c591b80fa605e04e37e464782262b480a49a06b6e1d53e36dbf8f8b3fab8563bee726b2508b6854f74c618c8c4b05203",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
