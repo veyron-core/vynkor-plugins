@@ -6,7 +6,7 @@
   "revoked": [],
   "agent": {
     "name": "Agent",
-    "description": "Multi-step goal loop for vynkor plugins: takes a natural-language goal, plans and acts by calling other plugins' kernel-routed actions as tools (through `ai`'s `chat_completion`), and persists every goal as a JSON document in its own `database` namespace.",
+    "description": "Multi-step goal loop for vynkor plugins: takes a natural-language goal, plans and acts by calling other plugins' kernel-routed actions as tools via ai's chat_completion (native tools->tool_calls passthrough with text-protocol fallback), and persists every goal as a JSON document in its own database namespace.",
     "category": "utility",
     "tags": [
       "stable"
@@ -34,6 +34,13 @@
         "signature": "82ca0f22d453485ebbacc0bd168616885abf357451f6b4b1dab0757abf1ecdb60a8060aa9ccb7ea17b1ae351b34c5467e3b1d4f1ef9d2f44790bfcc89d87f302",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
+      },
+      "0.1.3": {
+        "archive_url": "dist/agent/versions/0.1.3/agent-0.1.3.zip",
+        "sha256": "1d1d6b10a3ece489e7fda83984b9f8ccd58028ec107808165d6db4ab38b44505",
+        "signature": "b79066bc11837fccfd0fab80b0a7a05aef1b85a1d16a6bd20d380df8d93400e71864b645ae90c49706aae03e0d6e6737a03c1c791e7d3b1f0a8253f9f3fcf602",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
       }
     }
   },
@@ -51,6 +58,13 @@
         "archive_url": "dist/ai/versions/0.1.0/ai-0.1.0.zip",
         "sha256": "8b6c618519429a1a3d21bdd832065696e7040b1e56883fc8bb5d5a75e8ddd8a4",
         "signature": "53e3138072a67c8567f78e37c5698d8b306c35201bf0040bcbafdf95c95d86d128e61ed870f6aed22a5a89eb00cf1f799f02bea6526d730cc890bb84a5b9c608",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      },
+      "0.1.1": {
+        "archive_url": "dist/ai/versions/0.1.1/ai-0.1.1.zip",
+        "sha256": "0b55c91d32f5b025106acb37affcd246d4725540042924a48455d273dc3ffd10",
+        "signature": "f0bf80daa2c526ad9853e7a12f0f577af1e5cca8bc86c64757c568f4ef0508c198c170d3e3308c7bbd246802651fb95cd2fe3cdf973720b898b9c50c7faa0e03",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
