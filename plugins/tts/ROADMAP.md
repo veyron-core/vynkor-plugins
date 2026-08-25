@@ -119,6 +119,11 @@ parsing. sherpa config assembly tested without loading a real model.
 
 ## Known bugs (live-kernel audit 2026-08-22)
 
+> **Fixed 2026-08 (`fix/live-audit-defects`, merged):** all blocking sherpa
+> calls now run via `tokio::task::spawn_blocking` so ONNX init/load can't
+> stall the async serve loop; isolated probes with real models return
+> `voices` instantly. See `docs/LIVE_KERNEL_AUDIT_2026-08-22.md` defect #2.
+
 - **Local `sherpa` actions hang indefinitely before the model loads.**
   First full live-kernel audit (`docs/LIVE_KERNEL_AUDIT_2026-08-22.md`,
   defect #2): `tts_voices`/`tts_synthesize` with provider `sherpa`

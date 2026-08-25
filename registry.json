@@ -11,7 +11,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/agent",
     "versions": {
       "0.1.0": {
@@ -39,7 +39,7 @@
   },
   "ai": {
     "name": "AI",
-    "description": "Provider-agnostic LLM chat completion (chat_completion) for anthropic + openai-compatible providers, routed through the network plugin; declares no permissions itself.",
+    "description": "Provider-agnostic LLM chat completion for vynkor plugins (text + vision content blocks, native tools->tool_calls passthrough, provider-rate-limit retries) plus OpenAI-compatible embeddings; anthropic + openai-compatible providers via the network plugin.",
     "category": "ai",
     "tags": [
       "llm"
@@ -63,7 +63,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/calendar",
     "versions": {
       "0.1.0": {
@@ -82,7 +82,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/clipboard",
     "versions": {
       "0.1.0": {
@@ -101,7 +101,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/daemon",
     "versions": {
       "0.1.0": {
@@ -154,7 +154,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/email",
     "versions": {
       "0.1.0": {
@@ -173,7 +173,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/filesystem",
     "versions": {
       "0.1.0": {
@@ -192,7 +192,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/gated-write",
     "versions": {
       "0.1.0": {
@@ -211,7 +211,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/hotkey",
     "versions": {
       "0.1.0": {
@@ -225,18 +225,55 @@
   },
   "launcher": {
     "name": "Launcher",
-    "description": "Launch apps and Steam games by name for vynkor plugins. Six providers:",
+    "description": "Launch apps and games by name",
     "category": "utility",
     "tags": [
-      "stable"
+      "desktop",
+      "steam",
+      "launch"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/launcher",
     "versions": {
       "0.1.0": {
         "archive_url": "dist/launcher/versions/0.1.0/launcher-0.1.0.zip",
         "sha256": "4a6d96aa82962e9a5e53480ff7585bc9fdc38a5203e53eee9abfece27a380504",
         "signature": "8e1f27dcaa5dcfb26b2ad2b76dbf3deb23e02be5d8ee2bdd4b38bdf851390628f418f8bbd0ac951c0727d632252a277e5a3820340f25c13ac93c4490c1defb00",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      },
+      "0.1.1": {
+        "archive_url": "dist/launcher/versions/0.1.1/launcher-0.1.1.zip",
+        "sha256": "f84ab8049c1955471e328dceaafdc4241dbca267ce4e9c98fb6fd0a6a966befe",
+        "signature": "",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      },
+      "0.1.2": {
+        "archive_url": "dist/launcher/versions/0.1.2/launcher-0.1.2.zip",
+        "sha256": "d678483bb734f0bde10adac7a089786f1151f83cd3c4254090b8f439a16f4396",
+        "signature": "",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      },
+      "0.1.3": {
+        "archive_url": "dist/launcher/versions/0.1.3/launcher-0.1.3.zip",
+        "sha256": "c025499df79800a83a4247301e0a0bb509e71846b1d61e986aaeaca9911b8f45",
+        "signature": "",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      },
+      "0.1.4": {
+        "archive_url": "dist/launcher/versions/0.1.4/launcher-0.1.4.zip",
+        "sha256": "7e72b7ee13bfba4c97630fea094fd2afba36602bcc2cea0ad8ff8da86417ed16",
+        "signature": "",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      },
+      "0.1.5": {
+        "archive_url": "dist/launcher/versions/0.1.5/launcher-0.1.5.zip",
+        "sha256": "4b00d689e2d3a7442067cf117dcec1809305885da2b6060c9e7bf56ae8793ae2",
+        "signature": "",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -270,7 +307,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/mic",
     "versions": {
       "0.1.0": {
@@ -308,7 +345,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/notes",
     "versions": {
       "0.1.0": {
@@ -327,7 +364,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/notify",
     "versions": {
       "0.1.0": {
@@ -365,7 +402,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/scheduler",
     "versions": {
       "0.1.0": {
@@ -384,7 +421,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/search",
     "versions": {
       "0.1.0": {
@@ -403,7 +440,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/secrets",
     "versions": {
       "0.1.0": {
@@ -422,7 +459,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/sound",
     "versions": {
       "0.1.0": {
@@ -462,7 +499,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/sync",
     "versions": {
       "0.1.0": {
@@ -481,7 +518,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/sync-client",
     "versions": {
       "0.1.0": {
@@ -544,7 +581,7 @@
     "tags": [
       "stable"
     ],
-    "status": "",
+    "status": "stable",
     "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/vector-db",
     "versions": {
       "0.1.0": {

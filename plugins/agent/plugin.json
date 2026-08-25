@@ -1,6 +1,6 @@
 {
   "plugin_id": "agent",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "permissions": [
     "PERMISSION_STORAGE",
     "PERMISSION_EVENT_PUBLISH"

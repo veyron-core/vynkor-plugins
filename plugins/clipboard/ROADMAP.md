@@ -19,6 +19,12 @@ Text-only system clipboard access via host binaries — one blessed path for
 
 ## Known bugs (live-kernel audit 2026-08-22)
 
+> **Fixed 2026-08 (`fix/live-audit-defects`, merged):** the spawn → stdin →
+> wait path now uses a real `tokio::time::timeout` with `kill_on_drop(true)`,
+> and writers (`wl-copy`/`xclip -in`) complete on direct-child exit instead
+> of waiting for daemon-inherited pipe EOF — `clipboard_write` is ~25 ms.
+> See `docs/LIVE_KERNEL_AUDIT_2026-08-22.md` defect #1.
+
 - **`clipboard_write` takes 35–60+ s** on Wayland while `clipboard_read`
   is 3–22 ms and the same `wl-copy` binary answers instantly from a
   shell. Found in the first full live-kernel audit

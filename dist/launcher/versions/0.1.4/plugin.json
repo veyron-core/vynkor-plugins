@@ -1,6 +1,6 @@
 {
   "plugin_id": "launcher",
-  "version": "0.1.5",
+  "version": "0.1.4",
   "permissions": [
     "launch"
   ],
@@ -24,7 +24,7 @@
           "app_id": {
             "type": "string",
             "minLength": 1,
-            "description": "App or game id to launch (desktop file id without .desktop, or Steam appid). For desktop, matches file stem; for Steam, numeric appid. Also accepts display name when unique. Resolve the exact id via launch_list first; display-name matching is unique-only and waydroid android-app entries are excluded."
+            "description": "App or game id to launch (desktop file id without .desktop, or Steam appid). For desktop, matches file stem; for Steam, numeric appid. Also accepts display name when unique."
           },
           "provider": {
             "type": "string",

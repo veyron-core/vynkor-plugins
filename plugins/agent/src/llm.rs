@@ -83,7 +83,7 @@ pub fn opening_messages(goal: &str, context: &str, catalog: &Catalog) -> Vec<Tur
             })
         })
         .collect();
-    let instructions = format!(
+    let mut instructions = format!(
         "You are the vynkor host agent: you complete the user's goal by \
          calling host tools step by step.\n\n\
          Available tools (JSON array; `parameters` is a JSON Schema for the \
@@ -98,6 +98,24 @@ pub fn opening_messages(goal: &str, context: &str, catalog: &Catalog) -> Vec<Tur
          answer as PLAIN TEXT — no JSON object at all.",
         serde_json::to_string_pretty(&tools_json).unwrap_or_else(|_| "[]".to_string()),
     );
+    // only when the goal loop can actually launch apps: name-based lookup is
+    // unique-only, so a guessed short name ("telegram") 404s while the exact
+    // catalog id works
+    let has_launch = catalog.tools.iter().any(|t| t.name == "launch");
+    let has_list = catalog.tools.iter().any(|t| t.name == "launch_list");
+    if has_launch && has_list {
+        instructions.push_str(
+            "\n\nLauncher rule:\n\
+             - Never pass a guessed or human app name straight to `launch`.\n\
+             - First call `launch_list` with {\"query\": \"<name>\"}, pick the \
+             best match from its results, and pass that exact `id` as \
+             `app_id`.\n\
+             - If several entries share the display name, prefer the one whose \
+             exec does NOT start with \"waydroid\" unless the user explicitly \
+             wants the Android app; if it is still ambiguous, ask via final \
+             answer.",
+        );
+    }
     let mut msgs = vec![Turn { role: "user".into(), content: instructions }];
     let goal_msg = if context.is_empty() {
         goal.to_string()
@@ -386,6 +404,36 @@ mod tests {
         );
         // Unterminated brace → plain final.
         assert_eq!(parse_reply("{\"tool\":\"a\""), Reply::Final("{\"tool\":\"a\"".into()));
+    }
+
+    #[test]
+    fn opening_messages_carry_launcher_rule_only_when_launchable() {
+        let tool = |name: &str| crate::tools::ToolSpec {
+            name: name.into(),
+            description: "d".into(),
+            parameters: json!({"type": "object"}),
+            requires_confirmation: false,
+            risk: String::new(),
+            timeout_ms: 30_000,
+            source: crate::tools::Source::Kernel,
+        };
+        let no_launch = Catalog {
+            tools: vec![tool("notify_send")],
+            allowed_actions: vec!["notify_send".into()],
+            tools_file_set: false,
+        };
+        assert!(!opening_messages("g", "", &no_launch)[0]
+            .content
+            .contains("Launcher rule"));
+
+        let launchable = Catalog {
+            tools: vec![tool("launch"), tool("launch_list")],
+            allowed_actions: vec!["launch".into(), "launch_list".into()],
+            tools_file_set: false,
+        };
+        let msgs = opening_messages("g", "", &launchable);
+        assert!(msgs[0].content.contains("Launcher rule"));
+        assert!(msgs[0].content.contains("launch_list"));
     }
 
     #[test]

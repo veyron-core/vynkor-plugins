@@ -159,13 +159,18 @@ against fixture JSON, no live network — the actual send is `network`'s job),
 
 ## Near-term (buildable now, no kernel changes)
 
-- **Vision input** — absorbs the old `image` plugin idea (dropped from the
-  main roadmap): extend `chat_completion`'s `messages[].content` to accept
-  image content blocks (base64 PNG/JPEG) alongside text. Both wire shapes
-  support this natively — anthropic Messages API `image` source blocks,
-  OpenAI-compatible `image_url` data URLs — so it's an input-schema +
-  adapter-parse extension, not a new provider path. Same vault-first keys,
-  same `network` routing, no new permissions.
+- **Vision input** — **shipped in 0.1.1**: `messages[].content` accepts
+  image content blocks (`{"type":"image","mime_type":...,"data_base64":...}`,
+  png/jpeg/gif/webp, ≤8 per message, ≤5 MiB decoded each), adapted to
+  anthropic `image` source blocks / openai `image_url` data URLs.
+- **Native tool-use passthrough** — **shipped in 0.1.1**: `tools` in
+  (`{name, description?, input_schema?}`), model invocations out as
+  normalized `tool_calls` (`{id, name, arguments_json}`); omitted when empty
+  so plain-text responses keep the pre-tools shape.
+- **Retry-on-429** — **shipped in 0.1.1**: `max_retries` (default 2) /
+  `retry_backoff_ms` (default 1000) forwarded to `network`'s `http_request`,
+  which re-sends on 429/transient-5xx with doubling backoff; LLM-appropriate
+  longer default backoff than network's own 200 ms.
 - **Image generation (`image_gen`)** — second action hitting provider image
   endpoints. OpenAI-compatible only (`POST {base_url}/images/generations` —
   covers OpenAI and local Stable Diffusion gateways; anthropic has no gen
@@ -175,11 +180,6 @@ against fixture JSON, no live network — the actual send is `network`'s job),
    today's model is one `ActionRequest` → one `ActionResponse`, so v1 has to
    buffer the full completion before replying. Fine for v1, revisit once
    R6-02 (`ActionStreamChunk`, see `veyron/ROADMAP.md`) lands in the kernel.
-- **Per-provider adapters** — start with `anthropic`, add `openai`-compatible
-  next (same request shape as many self-hosted/OSS-model gateways).
-- **Retry-on-429** — mirror `network`'s retry/backoff, but rate-limit
-  responses from LLM providers need their own backoff tuning (usually
-  longer than a generic HTTP 429).
 - **Token/cost accounting** — log `usage` fields per call; no event bus
   path yet (see below), so stdout JSON logging like `network` does today.
 

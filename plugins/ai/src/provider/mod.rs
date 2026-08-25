@@ -19,13 +19,34 @@ pub struct HttpRequestJson {
     pub headers: HashMap<String, String>,
     pub body: String,
     pub timeout_ms: u64,
+    /// Retries for transient failures (429/5xx), executed by `network`
+    /// itself with exponential backoff. Defaults live in
+    /// [`crate::request`] and are clamped there.
+    #[serde(default)]
+    pub max_retries: u32,
+    #[serde(default)]
+    pub retry_backoff_ms: u64,
+}
+
+/// One tool invocation requested by the model. `arguments_json` is the raw
+/// arguments object serialized to a string (openai's native shape) so the
+/// caller can parse it against its own schema.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments_json: String,
 }
 
 /// Normalized completion result — the shape `ai` returns to its own
 /// callers in `ActionResponse.data_json`, regardless of provider.
+/// `tool_calls` is omitted when empty so plain-text responses keep the
+/// exact pre-tools JSON shape.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ChatResult {
     pub content: String,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub tool_calls: Vec<ToolCall>,
     pub stop_reason: String,
     pub usage: Usage,
 }
