@@ -18,7 +18,21 @@ use crate::tools::Catalog;
 use crate::Rpc;
 
 /// Hard cap matching `ai`'s own `MAX_TIMEOUT_MS`.
-const CHAT_TIMEOUT_MS: u32 = 30_000;
+pub const CHAT_TIMEOUT_MS: u32 = 30_000;
+
+/// Operator env var: per-completion timeout override. Local CPU models
+/// routinely need more than the 30s default — pair a raised value with a
+/// raised kernel watchdog (`watchdog_interval_secs`/`watchdog_timeout_secs`),
+/// since ai's serve loop stays blocked for the duration.
+pub const CHAT_TIMEOUT_ENV: &str = "AGENT_PLUGIN_AI_TIMEOUT_MS";
+
+pub fn chat_timeout_ms() -> u32 {
+    std::env::var(CHAT_TIMEOUT_ENV)
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(CHAT_TIMEOUT_MS)
+        .clamp(1_000, 300_000)
+}
 /// Default `max_tokens` when neither env nor request names one.
 pub const DEFAULT_MAX_TOKENS: u32 = 1024;
 
@@ -248,10 +262,11 @@ pub async fn chat(
         params.insert("tools".into(), Value::Array(tools.to_vec()));
     }
     params.insert("max_tokens".into(), json!(plan.max_tokens));
-    params.insert("timeout_ms".into(), json!(CHAT_TIMEOUT_MS));
+    let timeout = chat_timeout_ms();
+    params.insert("timeout_ms".into(), json!(timeout));
     params.insert("max_retries".into(), json!(ai_max_retries()));
 
-    let v = rpc.call("chat_completion", Value::Object(params), CHAT_TIMEOUT_MS).await?;
+    let v = rpc.call("chat_completion", Value::Object(params), timeout).await?;
     let content = v
         .get("content")
         .and_then(Value::as_str)
@@ -615,6 +630,21 @@ mod tests {
         // Here just assert the guard constants line up with ai's cap.
         assert_eq!(CHAT_TIMEOUT_MS, 30_000);
         let _ = plan;
+    }
+
+    #[test]
+    fn chat_timeout_parses_env_with_clamp_and_default() {
+        std::env::remove_var(CHAT_TIMEOUT_ENV);
+        assert_eq!(chat_timeout_ms(), 30_000);
+        std::env::set_var(CHAT_TIMEOUT_ENV, "150000");
+        assert_eq!(chat_timeout_ms(), 150_000);
+        std::env::set_var(CHAT_TIMEOUT_ENV, "999999999");
+        assert_eq!(chat_timeout_ms(), 300_000);
+        std::env::set_var(CHAT_TIMEOUT_ENV, "junk");
+        assert_eq!(chat_timeout_ms(), 30_000);
+        std::env::set_var(CHAT_TIMEOUT_ENV, "500");
+        assert_eq!(chat_timeout_ms(), 1_000);
+        std::env::remove_var(CHAT_TIMEOUT_ENV);
     }
 
     #[test]
