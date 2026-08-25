@@ -1,0 +1,9 @@
+[package]
+name = "vyn-act"
+version = "0.1.0"
+edition = "2021"
+description = "Call a kernel-routed action from the CLI: vyn-act <action> [params_json|@file] [timeout_ms]"
+
+[dependencies]
+vynkor-sdk = "0.0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }

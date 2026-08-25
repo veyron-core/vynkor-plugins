@@ -22,6 +22,50 @@ const CHAT_TIMEOUT_MS: u32 = 30_000;
 /// Default `max_tokens` when neither env nor request names one.
 pub const DEFAULT_MAX_TOKENS: u32 = 1024;
 
+/// Operator env var: named `ai` profile used when the primary LLM leg fails
+/// (provider 429/5xx, timeout, unknown model). Empty/unset = no fallback.
+pub const FALLBACK_AGENT_ENV: &str = "AGENT_PLUGIN_FALLBACK_AGENT_ID";
+
+/// The fallback profile plan: profile mode ignores the explicit fields, so
+/// swapping `agent_id` (and clearing them for clarity) is the whole swap.
+pub fn fallback_plan(plan: &LlmPlan, fallback_agent_id: &str) -> LlmPlan {
+    let mut p = plan.clone();
+    p.agent_id = fallback_agent_id.to_string();
+    p.provider.clear();
+    p.base_url.clear();
+    p.model.clear();
+    p.api_key_env.clear();
+    p
+}
+
+/// One chat round-trip with a single operator-configured retry: when
+/// [`FALLBACK_AGENT_ENV`] names a different profile and the primary call
+/// fails, the same transcript is replayed through the fallback profile.
+pub async fn chat_with_fallback(
+    rpc: &Rpc,
+    plan: &LlmPlan,
+    transcript: &[Turn],
+) -> Result<String, String> {
+    match chat(rpc, plan, transcript).await {
+        Ok(content) => Ok(content),
+        Err(primary_err) => {
+            let fb = std::env::var(FALLBACK_AGENT_ENV).ok().filter(|s| !s.is_empty());
+            match fb {
+                Some(fb) if fb != plan.agent_id => {
+                    eprintln!(
+                        "[agent] primary LLM failed ({primary_err}); falling back to agent '{fb}'"
+                    );
+                    let retry_plan = fallback_plan(plan, &fb);
+                    chat(rpc, &retry_plan, transcript).await.map_err(|e| {
+                        format!("{primary_err}; fallback '{fb}' also failed: {e}")
+                    })
+                }
+                _ => Err(primary_err),
+            }
+        }
+    }
+}
+
 /// Build the instructions message that carries the tool catalog. `ai`
 /// resolves `system_prompt` only from an `agent_id` profile (never from
 /// callers), so the portable place for operator-free instructions is a
@@ -177,6 +221,24 @@ pub fn parse_reply(content: &str) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    #[test]
+    fn fallback_plan_swaps_profile_and_clears_explicit_fields() {
+        let plan = LlmPlan {
+            provider: "openai".into(),
+            base_url: "https://example.com/v1".into(),
+            model: "some-model".into(),
+            api_key_env: "SOME_KEY".into(),
+            agent_id: "default".into(),
+            max_tokens: 256,
+        };
+        let fb = fallback_plan(&plan, "local");
+        assert_eq!(fb.agent_id, "local");
+        assert!(fb.model.is_empty() && fb.api_key_env.is_empty());
+        assert!(fb.provider.is_empty() && fb.base_url.is_empty());
+        assert_eq!(fb.max_tokens, 256);
+    }
 
     #[test]
     fn parses_bare_fenced_and_embedded_tool_calls() {

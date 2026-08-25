@@ -1,7 +1,7 @@
 {
   "meta": {
     "apiVersion": 2,
-    "lastUpdated": "2026-08-24"
+    "lastUpdated": "2026-08-25"
   },
   "revoked": [],
   "agent": {
@@ -18,6 +18,13 @@
         "archive_url": "dist/agent/versions/0.1.0/agent-0.1.0.zip?v=2",
         "sha256": "dbe864a41bb91b8d8569893ddcbeca8e721062c6e185db71eb53ca504f9c4afb",
         "signature": "b91e6b893b517a7f0d59b9aa93ca20fdfbb01998f7519f52d0a2b5390fe961ee3bd197694daed0d45a1d1c2463a6be83144ef818b902acc6d75d0df8f38a7a01",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      },
+      "0.1.1": {
+        "archive_url": "dist/agent/versions/0.1.1/agent-0.1.1.zip",
+        "sha256": "f55eb782f69e624dee0e9bd9ed4c401003dd9fc5cbbfa608bca433acb7786234",
+        "signature": "1c599a1820e20666bef92e5fb1e54ff634e37fac2799af8ffc3cec4db6e986f9945debb6102a7e337b091ecc94468cd9a46fd66d5a76760aab10cb8430431502",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }
@@ -94,6 +101,13 @@
         "archive_url": "dist/daemon/versions/0.1.0/daemon-0.1.0.zip",
         "sha256": "19b90c7a247c62595d514e3afbaded519b55168a5838d63bb84a83e8d25bb53b",
         "signature": "c8fbb415ea27737b35437ef003834b9b09ff5e68deb5a7f37f203f81b71d9bf1f112fa4adb426c244b9c68c42c98902982f26933f4650a27d6d3575b9b5f0701",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
+      },
+      "0.1.1": {
+        "archive_url": "dist/daemon/versions/0.1.1/daemon-0.1.1.zip",
+        "sha256": "ea180c6ca10e2ea843da0fab262b98a544603e20cb39404d47899d63f8693581",
+        "signature": "cbce160b097880869a8c8d2b64f9a17f3efbbd5f240ccef694d3b1d746ff66ddbe67fea50372aa5e935bf57daa3efcda4c0d039b18a1eb9d00734f9b9d563004",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
       }

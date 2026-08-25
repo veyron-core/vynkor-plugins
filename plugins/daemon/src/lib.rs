@@ -474,26 +474,44 @@ pub async fn run_voice_turn(
             Err(e) => return turn_result("error", String::new(), None, false, started, Some(e)),
         },
     };
-    respond(rpc, config, transcript, started).await
+    let listen_ms = started.elapsed().as_millis() as u64;
+    respond(rpc, config, transcript, started, listen_ms).await
 }
 
 /// Think+speak tail shared by every listen flavor: agent round-trip, then
 /// speak the answer aloud. Empty transcripts short-circuit to `silent`.
-pub async fn respond(rpc: &Rpc, config: &Config, transcript: String, started: Instant) -> Value {
+/// `listen_ms` (capture+transcribe time) rides along into the `stages`
+/// breakdown so operators can see where a slow turn spent its time.
+pub async fn respond(
+    rpc: &Rpc,
+    config: &Config,
+    transcript: String,
+    started: Instant,
+    listen_ms: u64,
+) -> Value {
     if transcript.trim().is_empty() {
-        return turn_result("silent", transcript, None, false, started, None);
+        let mut v = turn_result("silent", transcript, None, false, started, None);
+        attach_stages(&mut v, listen_ms, 0, 0);
+        return v;
     }
 
+    let t_agent = Instant::now();
     let answer = match run_agent(rpc, config, &transcript).await {
         Ok(a) => a,
-        Err(e) => return turn_result("error", transcript, None, false, started, Some(e)),
+        Err(e) => {
+            let mut v =
+                turn_result("error", transcript, None, false, started, Some(e));
+            attach_stages(&mut v, listen_ms, t_agent.elapsed().as_millis() as u64, 0);
+            return v;
+        }
     };
+    let agent_ms = t_agent.elapsed().as_millis() as u64;
 
     // A goal can legitimately finish without prose (declined, needs
     // confirmation, max_steps): report it rather than speaking nothing
     // silently.
     let Some(text) = answer.answer.clone() else {
-        return turn_result_with_goal(
+        let mut v = turn_result_with_goal(
             "error",
             transcript,
             false,
@@ -504,12 +522,40 @@ pub async fn respond(rpc: &Rpc, config: &Config, transcript: String, started: In
             )),
             &answer,
         );
+        attach_stages(&mut v, listen_ms, agent_ms, 0);
+        return v;
     };
 
-    match speak(rpc, config, &text).await {
-        Ok(_) => turn_result_with_goal("answered", transcript, true, started, None, &answer),
-        Err(e) => turn_result_with_goal("error", transcript, false, started, Some(e), &answer),
+    let t_speak = Instant::now();
+    let spoken = match speak(rpc, config, &text).await {
+        Ok(_) => true,
+        Err(e) => {
+            let mut v =
+                turn_result_with_goal("error", transcript, false, started, Some(e), &answer);
+            attach_stages(&mut v, listen_ms, agent_ms, t_speak.elapsed().as_millis() as u64);
+            return v;
+        }
+    };
+    let speak_ms = t_speak.elapsed().as_millis() as u64;
+
+    let mut v = turn_result_with_goal("answered", transcript, true, started, None, &answer);
+    attach_stages(&mut v, listen_ms, agent_ms, speak_ms);
+    v
+}
+
+/// Attach the per-stage latency breakdown and echo it to the plugin log —
+/// one line per turn is the whole observability story for voice latency.
+fn attach_stages(v: &mut Value, listen_ms: u64, agent_ms: u64, speak_ms: u64) {
+    let total = v.get("duration_ms").and_then(Value::as_u64).unwrap_or(0);
+    if let Some(obj) = v.as_object_mut() {
+        obj.insert(
+            "stages".into(),
+            json!({"listen_ms": listen_ms, "agent_ms": agent_ms, "speak_ms": speak_ms}),
+        );
     }
+    eprintln!(
+        "[daemon] turn stages: listen={listen_ms}ms agent={agent_ms}ms speak={speak_ms}ms total={total}ms"
+    );
 }
 
 /// Dispatch the listen stage by mode.
@@ -679,7 +725,8 @@ pub async fn run_ptt_turn(
         Ok(t) => t,
         Err(e) => return turn_result("error", String::new(), None, false, started, Some(e)),
     };
-    respond(rpc, config, transcript, started).await
+    let listen_ms = started.elapsed().as_millis() as u64;
+    respond(rpc, config, transcript, started, listen_ms).await
 }
 
 /// The long-lived push-to-talk worker (`ptt` mode): idles on the hotkey

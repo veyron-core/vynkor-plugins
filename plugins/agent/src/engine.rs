@@ -119,7 +119,7 @@ pub async fn run(
             return Ok(());
         }
 
-        let content = llm::chat(rpc, &doc.llm, &doc.transcript).await;
+        let content = llm::chat_with_fallback(rpc, &doc.llm, &doc.transcript).await;
         let content = match content {
             Ok(c) => c,
             Err(e) => {
