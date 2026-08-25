@@ -296,6 +296,15 @@ fn wrap_with_terminal(
     }
 }
 
+/// argv for gtk-launch: it wants the desktop-file BASENAME — dotted ids
+/// ("org.telegram.desktop") resolve only WITH the ".desktop" suffix on this
+/// system (plain "firefox" works either way)
+fn gtk_launch_argv(app_id: &str, extra_args: &[String]) -> Vec<String> {
+    let mut a = vec![format!("{app_id}.desktop")];
+    a.extend_from_slice(extra_args);
+    a
+}
+
 pub fn resolve_launch_command(
     cfg: &Config,
     app: &AppEntry,
@@ -320,9 +329,7 @@ pub fn resolve_launch_command(
                 match method {
                     DesktopLauncher::GtkLaunch => {
                         if binary_in_path("gtk-launch") && !app.terminal {
-                            let mut a = vec![app.id.clone()];
-                            a.extend_from_slice(extra_args);
-                            (("gtk-launch".to_string()), a)
+                            (("gtk-launch".to_string()), gtk_launch_argv(&app.id, extra_args))
                         } else {
                             fallback_exec(app, extra_args)?
                         }
@@ -348,9 +355,7 @@ pub fn resolve_launch_command(
                     DesktopLauncher::Exec => fallback_exec(app, extra_args)?,
                     DesktopLauncher::Auto => {
                         if binary_in_path("gtk-launch") && !app.terminal {
-                            let mut a = vec![app.id.clone()];
-                            a.extend_from_slice(extra_args);
-                            (("gtk-launch".to_string()), a)
+                            (("gtk-launch".to_string()), gtk_launch_argv(&app.id, extra_args))
                         } else if binary_in_path("gio") && !app.terminal {
                             let mut a = vec!["launch".to_string(), app.path.display().to_string()];
                             a.extend_from_slice(extra_args);
@@ -480,6 +485,35 @@ mod tests {
         let filtered = list_apps(&cfg, "desktop", Some("alpha"), 100, false);
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].id, "a");
+    }
+
+    #[test]
+    fn gtk_launch_argv_appends_desktop_suffix() {
+        let argv = gtk_launch_argv("org.telegram.desktop", &["--new-window".to_string()]);
+        assert_eq!(argv[0], "org.telegram.desktop.desktop");
+        assert_eq!(argv[1], "--new-window");
+    }
+
+    #[test]
+    fn waydroid_launchers_are_never_offered() {
+        let td = tempfile::tempdir().unwrap();
+        std::fs::write(
+            td.path().join("waydroid.org.telegram.messenger.web.desktop"),
+            "[Desktop Entry]\nName=Telegram\nExec=waydroid app launch org.telegram.messenger.web\nType=Application\nCategories=X-WayDroid-App;\n",
+        )
+        .unwrap();
+        std::fs::write(
+            td.path().join("org.telegram.desktop.desktop"),
+            "[Desktop Entry]\nName=Telegram\nExec=telegram\nType=Application\n",
+        )
+        .unwrap();
+        let (cfg, _a, _b) = cfg_with_dirs(Some(td), None);
+        // even include_hidden=true must not surface waydroid entries
+        let apps = list_apps(&cfg, "desktop", None, 100, true);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].id, "org.telegram.desktop");
+        // unique-name resolution now works again
+        assert!(find_app(&cfg, "Telegram", "desktop").is_some());
     }
 
     #[test]
