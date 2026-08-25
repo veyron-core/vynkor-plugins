@@ -18,24 +18,25 @@
 //! hand (same rationale and structure as the `ai` plugin). Sequential, one
 //! request at a time — same model `ping-pong-rs` and `ai` use.
 
-use notify_plugin::handler;
+use notify_plugin::{handler, push};
 use vynkor_sdk::proto::{
     envelope, ActionRequest, ActionResponse, ActionStatus, Envelope, PluginManifest, Pong,
 };
 use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "notify";
-const PLUGIN_VERSION: &str = "0.2.0";
+const PLUGIN_VERSION: &str = "0.3.0";
 
 fn manifest() -> PluginManifest {
     PluginManifest {
-        permissions: vec!["PERMISSION_NOTIFY".into()],
+        permissions: vec!["PERMISSION_NOTIFY".into(), "PERMISSION_NETWORK".into()],
         actions: vec![
             "notify_send".to_string(),
             "notify_providers".to_string(),
             "notify_list".to_string(),
             "notify_mark_read".to_string(),
             "notify_delete".to_string(),
+            "push_send".to_string(),
         ],
         ..Default::default()
     }
@@ -55,6 +56,7 @@ async fn handle_action_request(client: &mut VynkorClient, req: ActionRequest) ->
         "notify_list" => handler::handle_notify_list(&req.params_json),
         "notify_mark_read" => handler::handle_notify_mark_read(&req.params_json),
         "notify_delete" => handler::handle_notify_delete(&req.params_json),
+        "push_send" => push::handle_push_send(client, &req.params_json).await,
         other => {
             return Envelope {
                 payload: Some(envelope::Payload::ActionResponse(ActionResponse {

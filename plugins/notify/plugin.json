@@ -1,8 +1,9 @@
 {
   "plugin_id": "notify",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "permissions": [
-    "notify"
+    "PERMISSION_NOTIFY",
+    "PERMISSION_NETWORK"
   ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
@@ -289,6 +290,88 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "push_send",
+      "permission": "notify",
+      "input": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "ntfy",
+              "gotify"
+            ],
+            "default": "ntfy"
+          },
+          "server": {
+            "type": "string",
+            "description": "Push server host[:port]; must be on NOTIFY_PLUGIN_PUSH_SERVERS. Defaults to the allowlist's first entry (ntfy.sh)."
+          },
+          "topic": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "ntfy topic. Required for ntfy, forbidden for gotify."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "description": "ntfy only."
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30000,
+            "default": 10000
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "pushed": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pushed",
+          "provider",
+          "server",
+          "status"
+        ],
+        "additionalProperties": false
+      }
     }
   ],
   "config_schema": {
@@ -328,5 +411,8 @@
       }
     },
     "additionalProperties": true
-  }
+  },
+  "requires": [
+    "network"
+  ]
 }

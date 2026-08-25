@@ -287,3 +287,159 @@ mod tests {
         assert!(err.contains("128"), "error was: {err}");
     }
 }
+
+// ---- push_send (INT-02: ntfy/Gotify push to the phone) ---------------------
+
+/// Comma-separated host allowlist for `push_send`'s `server` param.
+/// Default-deny except `ntfy.sh`; self-hosted Gotify/ntfy hosts are added
+/// by the operator here. A caller-controlled URL would let any plugin with
+/// the notify permission exfiltrate arbitrary text to arbitrary hosts.
+pub const PUSH_SERVERS_ENV: &str = "NOTIFY_PLUGIN_PUSH_SERVERS";
+pub const PUSH_DEFAULT_SERVERS: &str = "ntfy.sh";
+/// Auth token for ntfy (sent as `Authorization: Bearer …` when set).
+pub const NTFY_TOKEN_ENV: &str = "NOTIFY_PLUGIN_NTFY_TOKEN";
+/// App token for Gotify (sent as `X-Gotify-Token` when set).
+pub const GOTIFY_TOKEN_ENV: &str = "NOTIFY_PLUGIN_GOTIFY_TOKEN";
+/// Cap on `tags` entries (ntfy tags header / ignored by gotify).
+pub const MAX_PUSH_TAGS: usize = 8;
+/// Per-request HTTP timeout through `network` (clamped).
+pub const MAX_PUSH_TIMEOUT_MS: u64 = 30_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PushProvider {
+    Ntfy,
+    Gotify,
+}
+
+impl PushProvider {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PushProvider::Ntfy => "ntfy",
+            PushProvider::Gotify => "gotify",
+        }
+    }
+}
+
+/// Parameters for a `push_send` action.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PushParams {
+    /// `ntfy` (default) or `gotify`.
+    #[serde(default)]
+    pub provider: Option<String>,
+    /// Push server host (`host` or `host:port`, no scheme/path). Must be on
+    /// the [`PUSH_SERVERS_ENV`] allowlist; defaults to the first entry.
+    #[serde(default)]
+    pub server: Option<String>,
+    /// ntfy topic (required for ntfy, rejected for gotify). `[A-Za-z0-9_-]{1,64}`.
+    #[serde(default)]
+    pub topic: Option<String>,
+    /// Optional; omitted from the push payload when empty.
+    #[serde(default)]
+    pub title: String,
+    /// Required, non-empty, capped at [`MAX_MESSAGE_BYTES`].
+    pub message: String,
+    /// `1..=5` — ntfy priority levels / gotify priority int. Optional.
+    pub priority: Option<u8>,
+    /// Up to [`MAX_PUSH_TAGS`] short strings (ntfy only).
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// HTTP timeout in ms through `network` (`1..=MAX_PUSH_TIMEOUT_MS`,
+    /// default 10_000).
+    pub timeout_ms: Option<u64>,
+}
+
+/// Parse the operator's host allowlist: trimmed, lowercased, non-empty.
+pub fn parse_push_servers(raw: &str) -> Vec<String> {
+    let source = if raw.trim().is_empty() { PUSH_DEFAULT_SERVERS } else { raw };
+    let mut out = Vec::new();
+    for part in source.split(',') {
+        let host = part.trim().to_ascii_lowercase();
+        if !host.is_empty() && !out.contains(&host) {
+            out.push(host);
+        }
+    }
+    out
+}
+
+/// Exact host(:port) match against the allowlist, case-insensitive.
+pub fn is_allowed_push_server(server: &str, allowed: &[String]) -> bool {
+    let server = server.trim().to_ascii_lowercase();
+    allowed.iter().any(|h| h == &server)
+}
+
+fn validate_topic(topic: &str) -> Result<(), String> {
+    let ok_len = !topic.is_empty() && topic.len() <= 64;
+    let ok_chars =
+        topic.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    if ok_len && ok_chars {
+        Ok(())
+    } else {
+        Err("params.topic must be 1..=64 chars of [A-Za-z0-9_-]".to_string())
+    }
+}
+
+/// Parse and validate `params_json` for `push_send`.
+pub fn parse_push_params(
+    params_json: &[u8],
+    allowed_servers: &[String],
+) -> Result<PushParams, String> {
+    let p: PushParams = serde_json::from_slice(params_json).map_err(|e| {
+        format!(
+            "invalid params for push_send, expected {{provider?, server?, topic?, \
+             title?, message, priority?, tags?, timeout_ms?}}: {e}"
+        )
+    })?;
+    let provider = match p.provider.as_deref() {
+        None | Some("") | Some("ntfy") => PushProvider::Ntfy,
+        Some("gotify") => PushProvider::Gotify,
+        Some(other) => return Err(format!("unknown push provider: {other}")),
+    };
+    if p.title.len() > MAX_TITLE_BYTES {
+        return Err(format!("params.title exceeds {MAX_TITLE_BYTES} bytes"));
+    }
+    if p.message.trim().is_empty() {
+        return Err("push_send requires a non-empty message".to_string());
+    }
+    if p.message.len() > MAX_MESSAGE_BYTES {
+        return Err(format!("params.message exceeds {MAX_MESSAGE_BYTES} bytes"));
+    }
+    let server = p.server.clone().unwrap_or_else(|| allowed_servers[0].clone());
+    if !is_allowed_push_server(&server, allowed_servers) {
+        return Err(format!(
+            "params.server '{server}' is not in the operator's {} allowlist",
+            PUSH_SERVERS_ENV
+        ));
+    }
+    match provider {
+        PushProvider::Ntfy => {
+            let topic = p.topic.as_deref().unwrap_or_default();
+            validate_topic(topic)?;
+        }
+        PushProvider::Gotify => {
+            if p.topic.is_some() {
+                return Err("params.topic is ntfy-only; gotify uses its app token".to_string());
+            }
+        }
+    }
+    if let Some(priority) = p.priority {
+        if !(1..=5).contains(&priority) {
+            return Err("params.priority must be between 1 and 5".to_string());
+        }
+    }
+    if p.tags.len() > MAX_PUSH_TAGS {
+        return Err(format!("params.tags exceeds {MAX_PUSH_TAGS} entries"));
+    }
+    for tag in &p.tags {
+        if tag.is_empty() || tag.len() > 64 {
+            return Err("params.tags entries must be 1..=64 bytes".to_string());
+        }
+    }
+    if let Some(t) = p.timeout_ms {
+        if t == 0 || t > MAX_PUSH_TIMEOUT_MS {
+            return Err(format!(
+                "params.timeout_ms must be between 1 and {MAX_PUSH_TIMEOUT_MS}"
+            ));
+        }
+    }
+    Ok(p)
+}
