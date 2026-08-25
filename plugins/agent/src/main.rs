@@ -25,7 +25,7 @@ use vynkor_sdk::proto::{
 use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "agent";
-const PLUGIN_VERSION: &str = "0.1.0";
+const PLUGIN_VERSION: &str = "0.1.4";
 const ACTIONS: [&str; 5] =
     ["goal_start", "goal_get", "goal_list", "goal_resume", "tools_list"];
 
@@ -381,6 +381,7 @@ mod tests {
     enum Cmd {
         Call { action: String, params: Value, reply: oneshot::Sender<Result<Value, String>> },
         PushAiReply { content: String },
+        PushAiReplyValue { reply: Value },
     }
 
     struct Shim {
@@ -411,6 +412,15 @@ mod tests {
         async fn push_ai_reply(&self, content: &str) {
             self.tx
                 .send(Cmd::PushAiReply { content: content.to_string() })
+                .await
+                .expect("shim loop died");
+        }
+
+        /// Script a full normalized `chat_completion` payload — e.g. with a
+        /// native `tool_calls` array.
+        async fn push_ai_reply_value(&self, reply: Value) {
+            self.tx
+                .send(Cmd::PushAiReplyValue { reply })
                 .await
                 .expect("shim loop died");
         }
@@ -472,7 +482,7 @@ mod tests {
         commands_denied: bool,
     ) {
         let mut db = FakeDb::default();
-        let mut ai_replies: VecDeque<String> = VecDeque::new();
+        let mut ai_replies: VecDeque<Value> = VecDeque::new();
         let mut pending: StdHashMap<String, oneshot::Sender<Result<Value, String>>> =
             StdHashMap::new();
         let mut seq: u64 = 0;
@@ -514,11 +524,7 @@ mod tests {
                             } else if req.action == "chat_completion" {
                                 ai_requests.lock().await.push(params.clone());
                                 match ai_replies.pop_front() {
-                                    Some(content) => Ok(serde_json::json!({
-                                        "content": content,
-                                        "stop_reason": "end_turn",
-                                        "usage": {"input_tokens": 1, "output_tokens": 1}
-                                    })),
+                                    Some(reply) => Ok(reply),
                                     None => Err("no scripted ai reply".to_string()),
                                 }
                             } else {
@@ -642,7 +648,10 @@ mod tests {
                 cmd = rx.recv() => {
                     match cmd {
                         Some(Cmd::PushAiReply { content }) => {
-                            ai_replies.push_back(content);
+                            ai_replies.push_back(serde_json::json!({"content": content}));
+                        }
+                        Some(Cmd::PushAiReplyValue { reply }) => {
+                            ai_replies.push_back(reply);
                         }
                         Some(Cmd::Call { action, params, reply }) => {
                             seq += 1;
@@ -798,6 +807,43 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("not awaiting confirmation"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn native_tool_call_dispatches_structured_reply() {
+        let shim = start_plugin(Config::default()).await;
+        shim.push_ai_reply_value(serde_json::json!({
+            "content": "",
+            "tool_calls": [
+                {"id": "c1", "name": "notify_send", "arguments_json": "{\"title\": \"hi\"}"}
+            ]
+        }))
+        .await;
+        shim.push_ai_reply("Done.").await;
+
+        let res = shim.call("goal_start", serde_json::json!({"goal": "notify"})).await.unwrap();
+        assert_eq!(res["status"], "completed", "{res}");
+        assert_eq!(res["final_answer"], "Done.");
+        let dispatched = shim.dispatched().await;
+        assert_eq!(dispatched.len(), 1);
+        assert_eq!(dispatched[0].0, "notify_send");
+        assert_eq!(dispatched[0].1["title"], "hi");
+    }
+
+    #[tokio::test]
+    async fn chat_completion_receives_native_tools_param() {
+        let shim = start_plugin(Config::default()).await;
+        shim.push_ai_reply("All done.").await;
+
+        let res = shim.call("goal_start", serde_json::json!({"goal": "anything"})).await.unwrap();
+        assert_eq!(res["status"], "completed");
+
+        let requests = shim.ai_requests().await;
+        assert_eq!(requests.len(), 1);
+        let tools = requests[0]["tools"].as_array().expect("tools param missing");
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert_eq!(names, vec!["notify_send", "fs_read"]);
+        assert_eq!(tools[0]["input_schema"]["type"], "object");
     }
 
     #[tokio::test]

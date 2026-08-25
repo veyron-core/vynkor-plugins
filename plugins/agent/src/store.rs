@@ -76,6 +76,10 @@ pub struct GoalDoc {
     pub pending_tool: String,
     #[serde(default)]
     pub pending_params: Value,
+    /// Set when a provider rejected the native `tools` param and the goal
+    /// degraded to the text protocol mid-flight; later steps skip it.
+    #[serde(default)]
+    pub native_tools_disabled: bool,
     pub llm: LlmPlan,
     pub max_steps: u32,
     pub created_at_ms: i64,
@@ -216,6 +220,7 @@ mod tests {
             transcript: Vec::new(),
             pending_tool: String::new(),
             pending_params: Value::Null,
+            native_tools_disabled: false,
             llm: LlmPlan {
                 provider: "openai".into(),
                 base_url: String::new(),
