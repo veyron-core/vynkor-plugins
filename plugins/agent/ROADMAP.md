@@ -29,9 +29,14 @@ actions, state persisted in `database`). Shipped as v0.1.0 — see README.md.
 
 ## Planned
 
-- **Native tool-use passthrough** — when `ai` grows a `tools` parameter
-  (anthropic/openai tool blocks), switch the loop off prompt-parsed JSON;
-  keep the text protocol as fallback for providers without tool support.
+- **Native tool-use passthrough** — **Phase 1 shipped in 0.1.4**: the
+  allowlisted catalog rides as `ai`'s native `tools` param and structured
+  `tool_calls` replies dispatch without text heuristics; the prompt-side
+  text protocol stays as the permanent fallback (models without tool
+  support, providers rejecting the param → per-goal degrade, remembered in
+  the goal doc). Remaining Phase 2 (unscheduled): true multi-turn history —
+  replaying assistant tool_use / tool_result blocks via an ai Message-blocks
+  extension — only if models prove confused by the flat-text transcript.
 - **Background goals** — detach long goals from the caller: accept → run on
   an internal task (calendar-style select branch) with progress events and
   `goal_status` polling. Blocked on a real consumer needing >30 s goals

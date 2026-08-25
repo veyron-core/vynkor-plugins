@@ -1,6 +1,6 @@
 {
   "plugin_id": "agent",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "permissions": [
     "PERMISSION_STORAGE",
     "PERMISSION_EVENT_PUBLISH"
@@ -310,6 +310,16 @@
           "off"
         ],
         "description": "kernel (default) fills tool specs from registered manifests via read-only list_plugins/get_manifest commands."
+      },
+      "AGENT_PLUGIN_NATIVE_TOOLS": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "on",
+          "off"
+        ],
+        "default": "auto",
+        "description": "Native tool-use passthrough: auto sends ai a tools param when the catalog is non-empty (degrades to the text protocol if the provider rejects it); on forces it; off is text-only."
       },
       "AGENT_PLUGIN_AI_PROVIDER": {
         "type": "string",

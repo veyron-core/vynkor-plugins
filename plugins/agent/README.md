@@ -8,9 +8,15 @@ document in its own `database` namespace.
 This is the integration point the root `ROADMAP.md` reserves: no business
 primitives of its own — LLM traffic routes through `ai`, state through
 `database`, tools through the kernel to whichever plugin owns the action.
-The tool-calling protocol lives in the prompt itself (`ai`'s normalized
-interface is plain text): the model answers either with plain-text final
-answer or exactly one `{"tool": ..., "params": {...}}` JSON object.
+
+Tool calling is dual-path. **Native passthrough** (default): the catalog is
+sent as `ai`'s `tools` param and the model's invocations come back as
+structured `tool_calls` — parsed without text heuristics. The text protocol
+below stays as a permanent fallback: models that ignore `tools`, providers
+without tool support, or a provider rejecting the param mid-goal (the goal
+degrades to text-only and remembers it) all keep working through the same
+forgiving prompt-side parser (`{"tool": ..., "params": {...}}`, fenced
+blocks unwrapped, qwen-style `<tool_call>` drift tolerated).
 
 ## Operator note
 
@@ -126,6 +132,7 @@ Env vars set in the kernel's config under this plugin's `env:` list — see
 |---|---|---|
 | `AGENT_PLUGIN_ALLOWED_ACTIONS` | *(unset = deny-all)* | Comma-separated action names the model may dispatch. |
 | `AGENT_PLUGIN_TOOLS_FILE` | *(unset)* | Path to the tool description JSON. |
+| `AGENT_PLUGIN_NATIVE_TOOLS` | `auto` | Native tool-use passthrough: `auto` sends `ai` a `tools` param when the catalog is non-empty; `on` forces it; `off` is text-protocol only. |
 | `AGENT_PLUGIN_AI_PROVIDER` | `openai` | `anthropic` \| `openai` for `ai.chat_completion`. |
 | `AGENT_PLUGIN_AI_BASE_URL` | *(ai default)* | OpenAI-compatible base URL override. |
 | `AGENT_PLUGIN_AI_MODEL` | *(none)* | Default model id. |
@@ -152,7 +159,9 @@ Env vars set in the kernel's config under this plugin's `env:` list — see
 ## Testing
 
 `cargo test -p agent-plugin --manifest-path plugins/agent/Cargo.toml` —
-21 unit + 9 fake-kernel e2e tests over `UnixStream::pair` (scripted
-`chat_completion` replies, fake `database`, dispatch recorder): happy path,
-unknown-tool feedback, confirmation halt + approve/decline, max-steps
-budget, LLM failure, persistence/listing, validation errors.
+35 unit + 13 fake-kernel e2e tests over `UnixStream::pair` (scripted
+`chat_completion` replies — text-protocol and native `tool_calls` shapes —,
+fake `database`, dispatch recorder): happy path, native dispatch + tools
+param forwarding, unknown-tool feedback, confirmation halt +
+approve/decline, max-steps budget, LLM failure, persistence/listing,
+validation errors.

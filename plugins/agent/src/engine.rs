@@ -119,9 +119,37 @@ pub async fn run(
             return Ok(());
         }
 
-        let content = llm::chat_with_fallback(rpc, &doc.llm, &doc.transcript).await;
-        let content = match content {
-            Ok(c) => c,
+        let want_native = match llm::native_mode() {
+            llm::NativeMode::Off => false,
+            llm::NativeMode::On => true,
+            llm::NativeMode::Auto => !catalog.tools.is_empty(),
+        } && !doc.native_tools_disabled;
+        let tools = if want_native {
+            llm::catalog_tools_param(catalog)
+        } else {
+            Vec::new()
+        };
+
+        let outcome = llm::chat_with_fallback(rpc, &doc.llm, &doc.transcript, &tools).await;
+        let outcome = match outcome {
+            Ok(o) => o,
+            Err(e) if want_native => {
+                // Provider rejected the tools param (models without tool
+                // support) — retry this turn text-only and stay degraded
+                // for the rest of the goal instead of failing it.
+                eprintln!("[agent] native tools rejected ({e}); degrading goal to text protocol");
+                doc.native_tools_disabled = true;
+                match llm::chat_with_fallback(rpc, &doc.llm, &doc.transcript, &[]).await {
+                    Ok(o) => o,
+                    Err(e2) => {
+                        doc.status = STATUS_ERROR.to_string();
+                        doc.error = e2.clone();
+                        next_step(doc, "error", json!({"error": e2}));
+                        persist(db, doc).await?;
+                        return Ok(());
+                    }
+                }
+            }
             Err(e) => {
                 doc.status = STATUS_ERROR.to_string();
                 doc.error = e.clone();
@@ -130,9 +158,9 @@ pub async fn run(
                 return Ok(());
             }
         };
-        push_turn(doc, "assistant", content.clone())?;
+        push_turn(doc, "assistant", outcome.content.clone())?;
 
-        match llm::parse_reply(&content) {
+        match llm::outcome_to_reply(&outcome) {
             Reply::Final(answer) => {
                 doc.status = STATUS_COMPLETED.to_string();
                 doc.final_answer = answer;

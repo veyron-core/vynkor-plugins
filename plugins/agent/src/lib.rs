@@ -249,6 +249,7 @@ async fn start_goal(db: &Db, rpc: &Rpc, params: GoalStartParams) -> Result<Actio
         transcript: Vec::new(),
         pending_tool: String::new(),
         pending_params: Value::Null,
+        native_tools_disabled: false,
         llm,
         max_steps: if params.max_steps == 0 {
             std::env::var("AGENT_PLUGIN_MAX_STEPS")

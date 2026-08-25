@@ -26,6 +26,68 @@ pub const DEFAULT_MAX_TOKENS: u32 = 1024;
 /// (provider 429/5xx, timeout, unknown model). Empty/unset = no fallback.
 pub const FALLBACK_AGENT_ENV: &str = "AGENT_PLUGIN_FALLBACK_AGENT_ID";
 
+/// Operator env var: native tool-use passthrough mode. `auto` (default)
+/// sends ai a native `tools` param whenever the catalog is non-empty;
+/// `on` forces it even for an empty catalog (provider decides);
+/// `off` restores the pure text protocol.
+pub const NATIVE_TOOLS_ENV: &str = "AGENT_PLUGIN_NATIVE_TOOLS";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeMode {
+    Auto,
+    On,
+    Off,
+}
+
+pub fn parse_native_mode(raw: &str) -> NativeMode {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "on" | "true" | "1" => NativeMode::On,
+        "off" | "false" | "0" => NativeMode::Off,
+        _ => NativeMode::Auto,
+    }
+}
+
+pub fn native_mode() -> NativeMode {
+    parse_native_mode(&std::env::var(NATIVE_TOOLS_ENV).unwrap_or_default())
+}
+
+/// The model leg's reply in `ai`'s normalized shape: assistant text plus
+/// any native tool invocations (empty unless `tools` was sent).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChatOutcome {
+    pub content: String,
+    pub tool_calls: Vec<NativeToolCall>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments_json: String,
+}
+
+/// Map the allowlisted catalog into ai's `tools` param. Non-object
+/// parameters (minimal specs) become an empty object schema so one bad
+/// entry can't invalidate the whole request.
+pub fn catalog_tools_param(catalog: &Catalog) -> Vec<Value> {
+    catalog
+        .tools
+        .iter()
+        .map(|t| {
+            let schema = if t.parameters.is_object() {
+                t.parameters.clone()
+            } else {
+                json!({"type": "object", "properties": {}})
+            };
+            json!({
+                "name": t.name,
+                "description": t.description,
+                "input_schema": schema,
+            })
+        })
+        .collect()
+}
+
 /// The fallback profile plan: profile mode ignores the explicit fields, so
 /// swapping `agent_id` (and clearing them for clarity) is the whole swap.
 pub fn fallback_plan(plan: &LlmPlan, fallback_agent_id: &str) -> LlmPlan {
@@ -45,9 +107,10 @@ pub async fn chat_with_fallback(
     rpc: &Rpc,
     plan: &LlmPlan,
     transcript: &[Turn],
-) -> Result<String, String> {
-    match chat(rpc, plan, transcript).await {
-        Ok(content) => Ok(content),
+    tools: &[Value],
+) -> Result<ChatOutcome, String> {
+    match chat(rpc, plan, transcript, tools).await {
+        Ok(outcome) => Ok(outcome),
         Err(primary_err) => {
             let fb = std::env::var(FALLBACK_AGENT_ENV).ok().filter(|s| !s.is_empty());
             match fb {
@@ -56,7 +119,7 @@ pub async fn chat_with_fallback(
                         "[agent] primary LLM failed ({primary_err}); falling back to agent '{fb}'"
                     );
                     let retry_plan = fallback_plan(plan, &fb);
-                    chat(rpc, &retry_plan, transcript).await.map_err(|e| {
+                    chat(rpc, &retry_plan, transcript, tools).await.map_err(|e| {
                         format!("{primary_err}; fallback '{fb}' also failed: {e}")
                     })
                 }
@@ -126,9 +189,15 @@ pub fn opening_messages(goal: &str, context: &str, catalog: &Catalog) -> Vec<Tur
     msgs
 }
 
-/// One `chat_completion` round-trip over the current transcript. Resolves
-/// to the assistant's text content.
-pub async fn chat(rpc: &Rpc, plan: &LlmPlan, transcript: &[Turn]) -> Result<String, String> {
+/// One `chat_completion` round-trip over the current transcript. When
+/// `tools` is non-empty it rides along as ai's native `tools` param; the
+/// reply carries both the assistant text and any native tool invocations.
+pub async fn chat(
+    rpc: &Rpc,
+    plan: &LlmPlan,
+    transcript: &[Turn],
+    tools: &[Value],
+) -> Result<ChatOutcome, String> {
     let messages: Vec<Value> = transcript
         .iter()
         .map(|t| json!({"role": t.role, "content": t.content}))
@@ -153,14 +222,56 @@ pub async fn chat(rpc: &Rpc, plan: &LlmPlan, transcript: &[Turn]) -> Result<Stri
         params.insert("agent_id".into(), json!(plan.agent_id));
     }
     params.insert("messages".into(), Value::Array(messages));
+    if !tools.is_empty() {
+        params.insert("tools".into(), Value::Array(tools.to_vec()));
+    }
     params.insert("max_tokens".into(), json!(plan.max_tokens));
     params.insert("timeout_ms".into(), json!(CHAT_TIMEOUT_MS));
 
     let v = rpc.call("chat_completion", Value::Object(params), CHAT_TIMEOUT_MS).await?;
-    v.get("content")
+    let content = v
+        .get("content")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .ok_or_else(|| format!("chat_completion returned unexpected payload: {v}"))
+        .ok_or_else(|| format!("chat_completion returned unexpected payload: {v}"))?;
+    let tool_calls = v
+        .get("tool_calls")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|tc| {
+                    Some(NativeToolCall {
+                        id: tc.get("id").and_then(Value::as_str)?.to_string(),
+                        name: tc.get("name").and_then(Value::as_str)?.to_string(),
+                        arguments_json: tc
+                            .get("arguments_json")
+                            .and_then(Value::as_str)
+                            .unwrap_or("{}")
+                            .to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(ChatOutcome { content, tool_calls })
+}
+
+/// Interpret a chat outcome: a native tool invocation wins (structured
+/// shape beats text heuristics); malformed arguments dispatch with empty
+/// params so the provider's own validation error feeds back into the loop;
+/// otherwise the legacy text protocol parses the content.
+pub fn outcome_to_reply(outcome: &ChatOutcome) -> Reply {
+    if let Some(tc) = outcome.tool_calls.iter().find(|tc| !tc.name.is_empty()) {
+        let params = serde_json::from_str::<Value>(&tc.arguments_json)
+            .ok()
+            .filter(|v| v.is_object())
+            .unwrap_or_else(|| json!({}));
+        return Reply::ToolCall {
+            name: tc.name.clone(),
+            params,
+        };
+    }
+    parse_reply(&outcome.content)
 }
 
 /// Model reply after parsing: a final answer or one tool call.
@@ -478,5 +589,114 @@ mod tests {
         // Here just assert the guard constants line up with ai's cap.
         assert_eq!(CHAT_TIMEOUT_MS, 30_000);
         let _ = plan;
+    }
+
+    #[test]
+    fn native_mode_parses_env_aliases_with_auto_default() {
+        assert_eq!(parse_native_mode(""), NativeMode::Auto);
+        assert_eq!(parse_native_mode("auto"), NativeMode::Auto);
+        assert_eq!(parse_native_mode("garbage"), NativeMode::Auto);
+        assert_eq!(parse_native_mode("on"), NativeMode::On);
+        assert_eq!(parse_native_mode("TRUE"), NativeMode::On);
+        assert_eq!(parse_native_mode("1"), NativeMode::On);
+        assert_eq!(parse_native_mode("off"), NativeMode::Off);
+        assert_eq!(parse_native_mode("0"), NativeMode::Off);
+        assert_eq!(parse_native_mode(" False "), NativeMode::Off);
+    }
+
+    #[test]
+    fn catalog_tools_param_maps_schema_and_guards_minimal_specs() {
+        let mut spec = crate::tools::ToolSpec {
+            name: "launch".into(),
+            description: "Launch an app".into(),
+            parameters: json!({"type": "object", "properties": {"app_id": {"type": "string"}}}),
+            requires_confirmation: false,
+            risk: String::new(),
+            timeout_ms: 30_000,
+            source: crate::tools::Source::Kernel,
+        };
+        let mut minimal = spec.clone();
+        minimal.name = "mystery".into();
+        minimal.parameters = Value::Null;
+        let cat = Catalog {
+            tools: vec![spec.clone(), minimal],
+            allowed_actions: vec!["launch".into(), "mystery".into()],
+            tools_file_set: false,
+        };
+        let tools = catalog_tools_param(&cat);
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[0]["name"], "launch");
+        assert_eq!(tools[0]["input_schema"]["properties"]["app_id"]["type"], "string");
+        assert!(tools[0].get("requires_confirmation").is_none());
+        // A Null/minimal schema must not invalidate the whole request.
+        assert_eq!(tools[1]["input_schema"]["type"], "object");
+        let _ = spec;
+    }
+
+    #[test]
+    fn native_tool_call_wins_and_parses_arguments() {
+        let outcome = ChatOutcome {
+            content: "Opening.".into(),
+            tool_calls: vec![NativeToolCall {
+                id: "c1".into(),
+                name: "launch".into(),
+                arguments_json: r#"{"app_id": "firefox"}"#.into(),
+            }],
+        };
+        assert_eq!(
+            outcome_to_reply(&outcome),
+            Reply::ToolCall { name: "launch".into(), params: json!({"app_id": "firefox"}) }
+        );
+    }
+
+    #[test]
+    fn malformed_native_arguments_dispatch_empty_for_loop_self_correction() {
+        let outcome = ChatOutcome {
+            content: String::new(),
+            tool_calls: vec![NativeToolCall {
+                id: "c1".into(),
+                name: "launch".into(),
+                arguments_json: "not json".into(),
+            }],
+        };
+        assert_eq!(
+            outcome_to_reply(&outcome),
+            Reply::ToolCall { name: "launch".into(), params: json!({}) }
+        );
+    }
+
+    #[test]
+    fn empty_named_tool_calls_fall_through_to_text_protocol() {
+        let outcome = ChatOutcome {
+            content: "{\"tool\": \"a\", \"params\": {\"x\": 1}}".into(),
+            tool_calls: vec![NativeToolCall {
+                id: "c1".into(),
+                name: String::new(),
+                arguments_json: "{}".into(),
+            }],
+        };
+        assert_eq!(
+            outcome_to_reply(&outcome),
+            Reply::ToolCall { name: "a".into(), params: json!({"x": 1}) }
+        );
+    }
+
+    #[test]
+    fn text_only_outcome_uses_legacy_parser() {
+        let outcome = ChatOutcome {
+            content: "All done.".into(),
+            tool_calls: Vec::new(),
+        };
+        assert_eq!(outcome_to_reply(&outcome), Reply::Final("All done.".into()));
+
+        // Models may ignore the tools param and answer in the text protocol.
+        let text_proto = ChatOutcome {
+            content: "{\"tool\": \"b\", \"params\": {}}".into(),
+            tool_calls: Vec::new(),
+        };
+        assert_eq!(
+            outcome_to_reply(&text_proto),
+            Reply::ToolCall { name: "b".into(), params: json!({}) }
+        );
     }
 }
