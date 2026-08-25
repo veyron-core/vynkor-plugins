@@ -13,6 +13,13 @@ All spawns are argv-only — never a shell — so `app_id`/`args` cannot inject 
 
 `launcher` declares `PERMISSION_LAUNCH` (`plugin.json: "permissions": ["launch"]`, per-action `permission: "launch"` on every action). Requires `sandbox: false` because it spawns host binaries and reads host desktop/Steam paths.
 
+Launches are delegated through a transient systemd **service** (`systemd-run --user --collect
+--property=KillMode=process` + GUI-env forwarding), never `--scope` and never a bare child:
+the kernel caps every plugin with an unraisable `RLIMIT_AS` (AUDIT M-03), a `--scope` child
+inherits it (big-VA apps like Firefox die on mmap), the default `KillMode` would kill the app
+when the delegating launcher exits, and a service inherits no env. Full story and evidence:
+[`docs/LAUNCHER_RLIMIT_AS_POSTMORTEM_2026-08-25.md`](../../docs/LAUNCHER_RLIMIT_AS_POSTMORTEM_2026-08-25.md).
+
 ## Actions
 
 ### `launch`
