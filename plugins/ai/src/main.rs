@@ -24,7 +24,7 @@ use vynkor_sdk::proto::{envelope, ActionResponse, ActionStatus, Envelope, Plugin
 use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "ai";
-const PLUGIN_VERSION: &str = "0.1.1";
+const PLUGIN_VERSION: &str = "0.1.2";
 
 /// Startup model-refresh retries: the first attempts typically race the
 /// `network` plugin's registration (`ActionNotFound`).

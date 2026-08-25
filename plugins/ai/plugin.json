@@ -1,6 +1,6 @@
 {
   "plugin_id": "ai",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "permissions": [
     "network",
     "secrets"
@@ -40,7 +40,7 @@
           },
           "model": {
             "type": "string",
-            "description": "Model id — either a stored/discovered model, or an explicit provider model for the legacy path."
+            "description": "Model id \u2014 either a stored/discovered model, or an explicit provider model for the legacy path."
           },
           "api_key_env": {
             "type": "string",
@@ -187,7 +187,7 @@
                 },
                 "arguments_json": {
                   "type": "string",
-                  "description": "Raw arguments object serialized to a string — parse against the tool's input_schema."
+                  "description": "Raw arguments object serialized to a string \u2014 parse against the tool's input_schema."
                 }
               },
               "required": [
@@ -240,7 +240,7 @@
           },
           "model": {
             "type": "string",
-            "description": "Embedding model id — e.g. text-embedding-3-small, nomic-embed-text. May be a stored model id."
+            "description": "Embedding model id \u2014 e.g. text-embedding-3-small, nomic-embed-text. May be a stored model id."
           },
           "api_key_env": {
             "type": "string",

@@ -82,6 +82,16 @@ impl Provider for OpenAiCompatProvider {
     }
 
     fn parse_response(&self, body: &[u8]) -> Result<ChatResult, String> {
+        /// Providers disagree on null vs omitted: mimo-v2.5 sends an explicit
+        /// `"tool_calls": null` on plain-text replies — serde(default) alone
+        /// rejects that, so nulls must fold into the default value.
+        fn null_to_seq<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+            T: serde::Deserialize<'de>,
+        {
+            Ok(<Option<Vec<T>> as serde::Deserialize>::deserialize(d)?.unwrap_or_default())
+        }
         #[derive(serde::Deserialize)]
         struct RawToolCallFunction {
             #[serde(default)]
@@ -100,7 +110,7 @@ impl Provider for OpenAiCompatProvider {
         struct ResponseMessage {
             #[serde(default)]
             content: Option<String>,
-            #[serde(default)]
+            #[serde(default, deserialize_with = "null_to_seq")]
             tool_calls: Vec<RawToolCall>,
         }
         #[derive(serde::Deserialize)]
@@ -362,6 +372,30 @@ mod tests {
         assert_eq!(result.tool_calls[0].id, "call_1");
         assert_eq!(result.tool_calls[0].name, "launch");
         assert_eq!(result.tool_calls[0].arguments_json, "{\"app_id\":\"firefox\"}");
+    }
+
+    #[test]
+    fn parses_mimo_shape_with_explicit_null_tool_calls() {
+        // Exact shape opencode returns for mimo-v2.5 on a plain-text reply.
+        let body = serde_json::json!({
+            "choices": [{
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": "Ок 🙂",
+                    "reasoning_content": "thinking...",
+                    "tool_calls": null
+                }
+            }],
+            "usage": {"prompt_tokens": 251, "completion_tokens": 65}
+        })
+        .to_string();
+        let result = OpenAiCompatProvider
+            .parse_response(body.as_bytes())
+            .unwrap();
+        assert_eq!(result.content, "Ок 🙂");
+        assert!(result.tool_calls.is_empty());
     }
 
     #[test]
