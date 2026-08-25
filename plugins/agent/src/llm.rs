@@ -199,8 +199,78 @@ fn strip_code_fence(text: &str) -> &str {
 /// Parse a model reply into a final answer or a tool call. Anything that
 /// isn't a well-formed `{"tool": ..., "params": {...}}` object degrades to
 /// [`Reply::Final`] carrying the original trimmed text.
+/// Extract a qwen-style `<tool_call>name<arg_key>k</arg_key><arg_value>v</arg_value>
+/// ...</tool_call>` block. Free-tier models drift into this shape despite the
+/// JSON contract; accepting it costs nothing and unblocks them.
+fn extract_xml_tool_call(text: &str) -> Option<Reply> {
+    let start = text.find("<tool_call>")?;
+    let rest = &text[start..];
+    let body = rest
+        .find("</tool_call>")
+        .map(|end| &rest[..end])
+        .unwrap_or(rest);
+    let inner = body.trim_start_matches("<tool_call>").trim();
+    let name = match inner.find("<arg_key>") {
+        Some(i) => inner[..i].trim(),
+        None => inner,
+    };
+    if name.is_empty() || name.contains('<') {
+        return None;
+    }
+    let mut params = serde_json::Map::new();
+    let mut cursor = inner;
+    while let Some(ki) = cursor.find("<arg_key>") {
+        let after_key = &cursor[ki + "<arg_key>".len()..];
+        let Some(k_end) = after_key.find("</arg_key>") else { break };
+        let key = after_key[..k_end].trim().to_string();
+        let vi = match after_key[k_end..].find("<arg_value>") {
+            Some(v) => k_end + v + "<arg_value>".len(),
+            None => break,
+        };
+        let after_val = &after_key[vi..];
+        let v_end = after_val.find("</arg_value>").unwrap_or(after_val.len());
+        let raw_val = after_val[..v_end].trim();
+        let val = match serde_json::from_str::<Value>(raw_val) {
+            Ok(v) => v,
+            Err(_) => json!(raw_val),
+        };
+        if key.is_empty() {
+            return None;
+        }
+        params.insert(key, val);
+        cursor = &after_val[v_end..];
+    }
+    Some(Reply::ToolCall {
+        name: name.to_string(),
+        params: Value::Object(params),
+    })
+}
+
+/// Strip drifted tool-call markup from what would otherwise be spoken.
+pub fn strip_tool_markup(text: &str) -> String {
+    let mut s = text.to_string();
+    while let Some(i) = s.find("<tool_call>") {
+        let end = s[i..]
+            .find("</tool_call>")
+            .map(|e| i + e + "</tool_call>".len())
+            .unwrap_or(s.len());
+        s.replace_range(i..end, "");
+    }
+    s.trim().to_string()
+}
+
 pub fn parse_reply(content: &str) -> Reply {
     let cleaned = strip_code_fence(content);
+
+    // Qwen-style drift first: a <tool_call> block means the model TRIED to
+    // dispatch — never speak that markup as prose.
+    if cleaned.contains("<tool_call>") {
+        if let Some(tc) = extract_xml_tool_call(cleaned) {
+            return tc;
+        }
+        return Reply::Final(strip_tool_markup(cleaned));
+    }
+
     let Some(obj_text) = first_balanced_object(cleaned) else {
         return Reply::Final(cleaned.trim().to_string());
     };
@@ -222,6 +292,44 @@ pub fn parse_reply(content: &str) -> Reply {
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn parses_qwen_style_xml_tool_call() {
+        let r = parse_reply(
+            "Открываю.\n<tool_call>launch<arg_key>app_id</arg_key><arg_value>Alacritty</arg_value></tool_call>",
+        );
+        assert_eq!(
+            r,
+            Reply::ToolCall { name: "launch".into(), params: json!({"app_id": "Alacritty"}) }
+        );
+        let numeric = parse_reply(
+            "<tool_call>schedule_set<arg_key>delay_ms</arg_key><arg_value>10000</arg_value></tool_call>",
+        );
+        assert_eq!(
+            numeric,
+            Reply::ToolCall { name: "schedule_set".into(), params: json!({"delay_ms": 10000}) }
+        );
+    }
+
+    #[test]
+    fn truncated_xml_still_dispatches_loop_self_corrects() {
+        // Обрезанный вызов диспатчится как есть: launcher вернёт ERR по
+        // обязательным полям, цикл скормит его модели и та поправится.
+        let r = parse_reply("Открываю новое окно.<tool_call>launch<arg_key>exec");
+        match &r {
+            Reply::ToolCall { name, .. } => assert_eq!(name, "launch"),
+            other => panic!("expected tool call, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unparseable_xml_never_leaks_markup_into_speech() {
+        let r = parse_reply("Готово.<tool_call><arg_value>мусор");
+        match &r {
+            Reply::Final(t) => assert!(!t.contains("<tool_call>") && !t.contains("<arg_value>"), "{t}"),
+            other => panic!("expected final, got {other:?}"),
+        }
+    }
 
     #[test]
     fn fallback_plan_swaps_profile_and_clears_explicit_fields() {
