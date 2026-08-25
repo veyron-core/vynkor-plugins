@@ -134,6 +134,7 @@ Env vars set in the kernel's config under this plugin's `env:` list — see
 | `AGENT_PLUGIN_TOOLS_FILE` | *(unset)* | Path to the tool description JSON. |
 | `AGENT_PLUGIN_NATIVE_TOOLS` | `auto` | Native tool-use passthrough: `auto` sends `ai` a `tools` param when the catalog is non-empty; `on` forces it; `off` is text-protocol only. |
 | `AGENT_PLUGIN_AI_MAX_RETRIES` | `0` | Provider 429/5xx retries delegated to `ai`. Keep 0 for interactive goals — ai's serve loop is sequential, and long retry chains trip the kernel watchdog; fail-fast + `AGENT_PLUGIN_FALLBACK_AGENT_ID` covers transient errors instead. |
+| `AGENT_PLUGIN_AI_TIMEOUT_MS` | `30000` | Per-completion timeout (clamped 1s..300s). Raise it for local CPU models — and raise the kernel watchdog (`watchdog_interval_secs` + `watchdog_timeout_secs`) to match, since ai stays blocked for the duration. |
 | `AGENT_PLUGIN_AI_PROVIDER` | `openai` | `anthropic` \| `openai` for `ai.chat_completion`. |
 | `AGENT_PLUGIN_AI_BASE_URL` | *(ai default)* | OpenAI-compatible base URL override. |
 | `AGENT_PLUGIN_AI_MODEL` | *(none)* | Default model id. |
