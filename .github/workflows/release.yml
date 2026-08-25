@@ -1,0 +1,150 @@
+# INF-01: tag-driven plugin releases (package + sign + publish).
+#
+# Usage:
+#   git tag agent-v0.1.8 && git push origin agent-v0.1.8
+#
+# The tag MUST have the form <slug>-v<semver> where <slug> is a plugin
+# directory under plugins/ and its manifest version matches <semver>.
+# Display name / description / category / tags / status are taken from the
+# slug's existing registry.json entry — register a NEW plugin locally once
+# (scripts/package.sh) before tagging it.
+#
+# Signing uses the Ed25519 seed from the SIGNING_KEY_HEX repository secret
+# (the same pinned maintainer key `vynm install` verifies against).
+# Protect the secret with a GitHub environment ("release") configured with
+# required reviewers before going live.
+
+name: release
+
+on:
+  push:
+    tags: ['*-v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  PINNED_PUBKEY: 6ee352d706eaf5b5114a1252fb76bb8a2bfbf177b0e4c8e9c21f73b9019083ee
+
+jobs:
+  package-and-release:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Parse tag into slug/version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^([a-z0-9-]+)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::tag '$tag' must match <slug>-v<semver> (e.g. agent-v0.1.8)"
+            exit 1
+          fi
+          echo "SLUG=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          echo "VERSION=${BASH_REMATCH[2]}" >> "$GITHUB_ENV"
+
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/${{ env.SLUG }}
+
+      - name: Install packaging deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends zip protobuf-compiler jq
+          python3 -m pip install --quiet cryptography
+
+      - name: Validate manifest against the tag
+        run: |
+          manifest="plugins/$SLUG/plugin.json"
+          if [[ ! -f "$manifest" ]]; then
+            echo "::error::plugins/$SLUG/plugin.json not found — slug must be a plugin directory"
+            exit 1
+          fi
+          manifest_version="$(jq -r '.version' "$manifest")"
+          if [[ "$manifest_version" != "$VERSION" ]]; then
+            echo "::error::manifest version $manifest_version != tag version $VERSION — bump plugin.json first"
+            exit 1
+          fi
+
+      - name: Resolve registry metadata for the slug
+        run: |
+          read -r NAME DESC CATEGORY TAGS STATUS < <(jq -r --arg s "$SLUG" '
+            .[$s] | [(.name // ""), (.description // ""), (.category // "utility"),
+                     ((.tags // []) | join(",")), (.status // "stable")] | @tsv' registry.json)
+          if [[ -z "$NAME" || -z "$DESC" ]]; then
+            echo "::error::no registry.json entry for slug '$SLUG' — run scripts/package.sh locally once to register it"
+            exit 1
+          fi
+          {
+            echo "NAME=$NAME"
+            echo "DESC=$DESC"
+            echo "CATEGORY=$CATEGORY"
+            echo "TAGS=$TAGS"
+            echo "STATUS=$STATUS"
+          } >> "$GITHUB_ENV"
+
+      - name: Package and sign
+        env:
+          VEYRON_SIGNING_KEY_HEX: ${{ secrets.SIGNING_KEY_HEX }}
+        run: |
+          scripts/package.sh "$SLUG" "$NAME" "$DESC" \
+            --category "$CATEGORY" --tags "$TAGS" --status "$STATUS"
+
+      - name: Verify signature exists
+        # package.sh already self-verifies the signature and warns when the
+        # key differs from the pinned maintainer pubkey; here we only assert
+        # a signature actually got written (128 hex + newline).
+        run: |
+          sig_file="dist/$SLUG/versions/$VERSION/signature.sig"
+          if [[ ! -s "$sig_file" ]]; then
+            echo "::error::missing or empty $sig_file — SIGNING_KEY_HEX secret not set?"
+            exit 1
+          fi
+          if ! grep -qE '^[0-9a-f]{128}$' "$sig_file"; then
+            echo "::error::$sig_file is not a 128-hex ed25519 signature"
+            exit 1
+          fi
+
+      - name: Commit dist/ + registry.json
+        run: |
+          branch="$(
+            git branch -r --contains "${GITHUB_SHA}" \
+              --format '%(refname:lstrip=3)' | grep -v '^HEAD$' | head -1
+          )"
+          if [[ -z "$branch" ]]; then
+            echo "::error::could not determine the source branch of the tag"
+            exit 1
+          fi
+          git config user.name "vynkor-release-bot"
+          git config user.email "release@vynkor.dev"
+          git add dist registry.json
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+          else
+            git commit -m "chore(release): ${SLUG}@${VERSION} [skip ci]"
+            git push origin "HEAD:$branch"
+          fi
+
+      - name: Create GitHub release with artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          vd="dist/$SLUG/versions/$VERSION"
+          gh release create "$GITHUB_REF_NAME" \
+            --title "${SLUG} ${VERSION}" \
+            --generate-notes \
+            "$vd/$SLUG-$VERSION.zip" \
+            "$vd/$SLUG-$VERSION-src.zip" \
+            "$vd/checksum.sha256" \
+            "$vd/signature.sig"
