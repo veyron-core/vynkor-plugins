@@ -32,6 +32,11 @@ pub fn scan_desktop_dirs(dirs: &[PathBuf], include_hidden: bool) -> Vec<DesktopE
             let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
+            // waydroid android-app launchers (waydroid.<pkg>.desktop) shadow
+            // real desktop apps by Name ("Telegram" x2) — never offer them
+            if stem.starts_with("waydroid.") {
+                continue;
+            }
             if seen.contains(stem) {
                 continue;
             }
