@@ -221,3 +221,83 @@ pub async fn handle_tts_speak(
     .to_string()
     .into_bytes())
 }
+
+/// Handle one `tts_speak_stream` action (EXI-02): like `tts_speak`, but the
+/// text is split into sentences first and each sentence is synthesized,
+/// encoded and streamed in turn — the peer starts hearing audio after one
+/// phrase instead of after the whole paragraph. Only the final packet of the
+/// final sentence carries `end_of_stream`.
+pub async fn handle_tts_speak_stream(
+    client: &mut VynkorClient,
+    params_json: &[u8],
+) -> Result<Vec<u8>, String> {
+    let params = request::parse_speak_request(params_json)?;
+    let sentences = crate::sentence::split_sentences(&params.text);
+    let sentences: Vec<String> = if sentences.is_empty() {
+        vec![params.text.clone()]
+    } else {
+        sentences
+    };
+
+    let config = opus::OpusConfig { sample_rate_hz: 0, channels: 1, bitrate: params.bitrate };
+    let _ = config; // rebuilt per sentence with the resolved rate
+
+    let total_sentences = sentences.len();
+    let mut packets_sent = 0usize;
+    let mut duration_seconds = 0f32;
+    let mut sample_rate = params.sample_rate_hz;
+
+    for (idx, sentence) in sentences.iter().enumerate() {
+        let is_last_sentence = idx + 1 == total_sentences;
+        let text = sentence.clone();
+        let voice = params.voice.clone();
+        let speed = params.speed;
+        let (samples, model_rate) =
+            tokio::task::spawn_blocking(move || {
+                crate::provider::sherpa::synthesize_samples(&text, &voice, speed)
+            })
+            .await
+            .map_err(|e| format!("sherpa synthesize task failed: {e}"))??;
+        sample_rate = if params.sample_rate_hz == 0 { model_rate } else { params.sample_rate_hz };
+        let opus_config = opus::OpusConfig {
+            sample_rate_hz: sample_rate,
+            channels: 1,
+            bitrate: params.bitrate,
+        };
+        let pcm: Vec<i16> = samples.iter().map(|&s| (s.clamp(-1.0, 1.0) * 32767.0) as i16).collect();
+        let packets = opus::encode_pcm(&pcm, &opus_config)?;
+        duration_seconds += samples.len() as f32 / model_rate.max(1) as f32;
+
+        let count = packets.len();
+        for (pi, packet) in packets.into_iter().enumerate() {
+            let chunk = AudioStreamChunk {
+                stream_id: params.stream_id,
+                codec: AudioCodec::Opus as i32,
+                sample_rate,
+                channels: 1,
+                data: packet,
+                end_of_stream: is_last_sentence && pi + 1 == count,
+            };
+            client
+                .send_audio_chunk(&params.target, chunk)
+                .await
+                .map_err(|e| {
+                    format!("failed to stream audio chunk to '{}': {e}", params.target)
+                })?;
+        }
+        packets_sent += count;
+    }
+
+    Ok(serde_json::json!({
+        "codec": "opus",
+        "stream_id": params.stream_id,
+        "target": params.target,
+        "sample_rate_hz": sample_rate,
+        "num_channels": 1,
+        "duration_seconds": duration_seconds,
+        "packets": packets_sent,
+        "sentences": total_sentences,
+    })
+    .to_string()
+    .into_bytes())
+}

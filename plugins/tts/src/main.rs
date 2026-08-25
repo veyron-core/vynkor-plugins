@@ -18,7 +18,7 @@ use vynkor_sdk::proto::{envelope, ActionResponse, ActionStatus, Envelope, Plugin
 use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "tts";
-const PLUGIN_VERSION: &str = "0.3.0";
+const PLUGIN_VERSION: &str = "0.4.0";
 
 /// Comma-separated allowlist of `ipc_targets` for `tts_speak` streaming.
 /// The kernel gates peer-to-peer unicast per-target (T-04): a target not
@@ -54,6 +54,7 @@ fn manifest() -> PluginManifest {
             "tts_synthesize".to_string(),
             "tts_voices".to_string(),
             "tts_speak".to_string(),
+            "tts_speak_stream".to_string(),
         ],
         ipc_targets,
         ..Default::default()
@@ -101,6 +102,21 @@ async fn handle_action_request(
             },
         },
         "tts_speak" => match handler::handle_tts_speak(client, &req.params_json).await {
+            Ok(data_json) => ActionResponse {
+                action_id: req.action_id,
+                status: ActionStatus::ActionOk as i32,
+                data_json,
+                error: String::new(),
+            },
+            Err(error) => ActionResponse {
+                action_id: req.action_id,
+                status: ActionStatus::ActionError as i32,
+                data_json: Vec::new(),
+                error,
+            },
+        },
+        "tts_speak_stream" => match handler::handle_tts_speak_stream(client, &req.params_json).await
+        {
             Ok(data_json) => ActionResponse {
                 action_id: req.action_id,
                 status: ActionStatus::ActionOk as i32,
