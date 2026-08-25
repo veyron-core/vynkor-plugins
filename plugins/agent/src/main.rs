@@ -25,9 +25,17 @@ use vynkor_sdk::proto::{
 use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "agent";
-const PLUGIN_VERSION: &str = "0.1.7";
-const ACTIONS: [&str; 5] =
-    ["goal_start", "goal_get", "goal_list", "goal_resume", "tools_list"];
+const PLUGIN_VERSION: &str = "0.2.0";
+const ACTIONS: [&str; 8] = [
+    "goal_start",
+    "goal_get",
+    "goal_list",
+    "goal_resume",
+    "tools_list",
+    "memory_forget",
+    "memory_clear",
+    "memory_list",
+];
 
 fn manifest() -> PluginManifest {
     PluginManifest {

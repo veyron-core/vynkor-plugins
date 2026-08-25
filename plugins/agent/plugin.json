@@ -1,6 +1,6 @@
 {
   "plugin_id": "agent",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "permissions": [
     "PERMISSION_STORAGE",
     "PERMISSION_EVENT_PUBLISH"
@@ -286,6 +286,85 @@
           "tools",
           "allowed_actions",
           "tools_file_set"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "memory_forget",
+      "input": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Semantic query; the top similar fact above the score floor is deleted."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "forgotten": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "forgotten"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "memory_clear",
+      "input": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cleared": {
+            "type": "integer",
+            "description": "Number of facts deleted."
+          }
+        },
+        "required": [
+          "cleared"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "memory_list",
+      "input": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "facts"
         ],
         "additionalProperties": false
       }
