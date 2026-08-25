@@ -54,9 +54,44 @@ Examples below show **params** (what goes in `params_json`) and **result**
 | `base_url` | openai only | `anthropic` defaults to `https://api.anthropic.com`; `openai` has no safe default (OpenAI vs OpenRouter vs Ollama), so it's required. A trailing `/` is trimmed. |
 | `model` | yes | Provider's model id. Not validated by `ai` — a bad model surfaces as the provider's own HTTP error. |
 | `api_key_env` | yes | Name of an env var the `ai` process reads. Must be on the operator's `AI_PLUGIN_ALLOWED_KEY_ENVS` allowlist. See [README's Configuration](./README.md#configuration). |
-| `messages` | yes | Non-empty array of `{role, content}` string pairs. Passed through to the provider verbatim. |
+| `messages` | yes | Non-empty array of `{role, content}`. `content` is a string **or** an array of blocks — text (`{"type":"text","text":...}`) and images (`{"type":"image","mime_type":"image/png|jpeg|gif|webp","data_base64":"..."}`, max 8/message, 5 MiB decoded each). |
+| `tools` | no | Native tool definitions: `{name, description?, input_schema?}`. Max 64; schemas ≤ 32 KiB, names must be unique. The model's invocations come back as output `tool_calls`. |
 | `max_tokens` | no | Default `1024`. Values above `8192` are **clamped**, not rejected. |
 | `timeout_ms` | no | Default and hard cap `30000`. Higher values are clamped to `30000` — the wrapping `network` call can't outlive that. |
+| `max_retries` / `retry_backoff_ms` | no | Retry policy for HTTP 429/transient 5xx, executed by `network` with doubling backoff. Default `2` retries from `1000` ms; caps `5` / `5000`. |
+
+## Vision example
+
+```jsonc
+// params
+{
+  "provider": "openai",
+  "base_url": "https://api.openai.com/v1",
+  "model": "gpt-4o",
+  "api_key_env": "OPENAI_API_KEY",
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type": "text", "text": "What's in this screenshot?"},
+      {"type": "image", "mime_type": "image/png", "data_base64": "<base64 PNG>"}
+    ]
+  }]
+}
+```
+
+## Tool-use example
+
+```jsonc
+// params — declare tools…
+"tools": [{"name": "launch", "description": "Launch an app by id",
+           "input_schema": {"type":"object","properties":{"app_id":{"type":"string"}},"required":["app_id"]}}]
+// …and the reply carries the invocation instead of (or alongside) text:
+{
+  "content": "",
+  "tool_calls": [{"id": "call_1", "name": "launch", "arguments_json": "{\"app_id\":\"firefox\"}"}],
+  "stop_reason": "tool_calls"
+}
+```
 
 ## `chat_completion` — response
 
@@ -70,6 +105,9 @@ Normalized across both providers:
   "usage": {"input_tokens": 17, "output_tokens": 42}
 }
 ```
+
+`tool_calls` appears only when the model requested invocations; plain-text
+responses keep exactly this shape.
 
 ## `embedding` — request (for vector-db, Ollama)
 

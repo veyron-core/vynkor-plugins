@@ -10,6 +10,40 @@ pub const DEFAULT_MAX_TOKENS: u32 = 1024;
 /// Hard ceiling on `max_tokens`. Clamped, never rejected.
 pub const MAX_MAX_TOKENS: u32 = 8192;
 
+/// Default `max_retries` forwarded to `network`'s `http_request`. Unlike
+/// `network` itself (opt-in, default 0), LLM providers rate-limit often
+/// enough that a small retry budget is the sane default here — see ROADMAP.
+pub const DEFAULT_MAX_RETRIES: u32 = 2;
+
+/// Hard ceiling on `max_retries`; matches `network`'s own cap.
+pub const MAX_RETRIES: u32 = 5;
+
+/// Default per-attempt retry backoff (doubling each attempt). Longer than
+/// `network`'s 200 ms default on purpose: provider 429s need real cooling-
+/// off time, not an instant second hammer.
+pub const DEFAULT_RETRY_BACKOFF_MS: u64 = 1000;
+
+/// Hard ceiling on `retry_backoff_ms`; matches `network`'s own cap.
+pub const MAX_RETRY_BACKOFF_MS: u64 = 5000;
+
+/// Image MIME types accepted in `image` content blocks. Matches the set
+/// both providers support natively.
+pub const ALLOWED_IMAGE_MIME_TYPES: [&str; 4] =
+    ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+/// Decoded-size ceiling per attached image (providers reject anything much
+/// larger anyway; failing here gives a clearer error than HTTP 413).
+pub const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+
+/// Max `image` blocks per single message.
+pub const MAX_IMAGES_PER_MESSAGE: usize = 8;
+
+/// Max `tools` entries per `chat_completion` call.
+pub const MAX_TOOLS: usize = 64;
+
+/// Serialized-size ceiling on one tool's `input_schema`.
+pub const MAX_TOOL_SCHEMA_BYTES: usize = 32 * 1024;
+
 pub const DEFAULT_ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com";
 
 /// Operator-supplied allowlist of env var names a caller's `api_key_env`
@@ -41,6 +75,136 @@ pub fn is_allowed_key_env(name: &str, allowed: &std::collections::HashSet<String
 pub struct Message {
     pub role: String,
     pub content: String,
+    /// Images attached to this message, in order. Empty for plain-text
+    /// messages; providers without vision support reject them server-side.
+    pub images: Vec<ImageBlock>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageBlock {
+    /// One of [`ALLOWED_IMAGE_MIME_TYPES`].
+    pub mime_type: String,
+    /// Base64 payload (no `data:` prefix) — decoded form is validated
+    /// against [`MAX_IMAGE_BYTES`] at parse time.
+    pub data_base64: String,
+}
+
+/// One native tool definition passed through to the provider. `input_schema`
+/// is a JSON Schema object describing the tool's parameters.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolSpec {
+    pub name: String,
+    pub description: String,
+    pub input_schema: serde_json::Value,
+}
+
+fn validate_image_block(block: &ImageBlock) -> Result<(), String> {
+    if !ALLOWED_IMAGE_MIME_TYPES.contains(&block.mime_type.as_str()) {
+        return Err(format!(
+            "unsupported image mime_type '{}' (allowed: {})",
+            block.mime_type,
+            ALLOWED_IMAGE_MIME_TYPES.join(", ")
+        ));
+    }
+    if block.data_base64.is_empty() {
+        return Err("image data_base64 must not be empty".to_string());
+    }
+    use base64::Engine;
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(&block.data_base64)
+        .map_err(|e| format!("image data_base64 is not valid base64: {e}"))?;
+    if decoded.len() > MAX_IMAGE_BYTES {
+        return Err(format!(
+            "image too large: {} decoded bytes (max {MAX_IMAGE_BYTES})",
+            decoded.len()
+        ));
+    }
+    Ok(())
+}
+
+/// Flatten a `messages[].content` value into text + images. Accepts a plain
+/// string or an array of typed blocks:
+/// `{"type":"text","text":...}` and `{"type":"image","mime_type":...,"data_base64":...}`.
+fn parse_content_value(value: serde_json::Value) -> Result<(String, Vec<ImageBlock>), String> {
+    match value {
+        serde_json::Value::String(s) => Ok((s, Vec::new())),
+        serde_json::Value::Array(blocks) => {
+            let mut texts: Vec<String> = Vec::new();
+            let mut images = Vec::new();
+            for block in blocks {
+                let obj = block
+                    .as_object()
+                    .ok_or("content blocks must be JSON objects")?;
+                match obj.get("type").and_then(|t| t.as_str()) {
+                    Some("text") => {
+                        let text = obj
+                            .get("text")
+                            .and_then(|t| t.as_str())
+                            .ok_or("text block requires a string 'text' field")?;
+                        texts.push(text.to_string());
+                    }
+                    Some("image") => {
+                        let mime_type = obj
+                            .get("mime_type")
+                            .and_then(|t| t.as_str())
+                            .ok_or("image block requires a string 'mime_type' field")?;
+                        let data_base64 = obj
+                            .get("data_base64")
+                            .and_then(|d| d.as_str())
+                            .ok_or("image block requires a string 'data_base64' field")?;
+                        let block = ImageBlock {
+                            mime_type: mime_type.to_string(),
+                            data_base64: data_base64.to_string(),
+                        };
+                        validate_image_block(&block)?;
+                        images.push(block);
+                    }
+                    other => {
+                        return Err(format!("unsupported content block type: {:?}", other));
+                    }
+                }
+            }
+            if images.len() > MAX_IMAGES_PER_MESSAGE {
+                return Err(format!(
+                    "too many images in one message: {} (max {MAX_IMAGES_PER_MESSAGE})",
+                    images.len()
+                ));
+            }
+            Ok((texts.join("\n"), images))
+        }
+        _ => Err("messages[].content must be a string or an array of content blocks".to_string()),
+    }
+}
+
+fn validate_tools(tools: &[ToolSpec]) -> Result<(), String> {
+    if tools.len() > MAX_TOOLS {
+        return Err(format!("too many tools: {} (max {MAX_TOOLS})", tools.len()));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for tool in tools {
+        if tool.name.trim().is_empty() {
+            return Err("tools[].name must not be empty".to_string());
+        }
+        if !seen.insert(tool.name.clone()) {
+            return Err(format!("duplicate tool name: {}", tool.name));
+        }
+        if !tool.input_schema.is_object() {
+            return Err(format!(
+                "tool '{}' input_schema must be a JSON object",
+                tool.name
+            ));
+        }
+        let schema_len = serde_json::to_vec(&tool.input_schema)
+            .map(|v| v.len())
+            .unwrap_or(usize::MAX);
+        if schema_len > MAX_TOOL_SCHEMA_BYTES {
+            return Err(format!(
+                "tool '{}' input_schema too large: {schema_len} bytes (max {MAX_TOOL_SCHEMA_BYTES})",
+                tool.name
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +213,7 @@ pub enum Provider {
     OpenAi,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ChatCompletionParams {
     pub provider: Provider,
     pub base_url: String,
@@ -58,6 +222,11 @@ pub struct ChatCompletionParams {
     pub messages: Vec<Message>,
     pub max_tokens: u32,
     pub timeout_ms: u64,
+    /// Native tool definitions forwarded to the provider; empty = none.
+    pub tools: Vec<ToolSpec>,
+    /// Retries forwarded to `network`'s `http_request` (429/5xx only).
+    pub max_retries: u32,
+    pub retry_backoff_ms: u64,
     /// Named agent whose model + system prompt are resolved by the handler
     /// from the database. When set, `model`/`provider`/`base_url`/
     /// `api_key_env` may be empty (they are filled in by the handler).
@@ -73,7 +242,20 @@ pub fn parse_request(params_json: &[u8]) -> Result<ChatCompletionParams, String>
     #[derive(serde::Deserialize)]
     struct RawMessage {
         role: String,
-        content: String,
+        content: serde_json::Value,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct RawTool {
+        name: String,
+        #[serde(default)]
+        description: String,
+        #[serde(default = "default_tool_schema")]
+        input_schema: serde_json::Value,
+    }
+
+    fn default_tool_schema() -> serde_json::Value {
+        serde_json::json!({"type": "object", "properties": {}})
     }
 
     #[derive(serde::Deserialize)]
@@ -83,8 +265,12 @@ pub fn parse_request(params_json: &[u8]) -> Result<ChatCompletionParams, String>
         model: Option<String>,
         api_key_env: Option<String>,
         messages: Option<Vec<RawMessage>>,
+        #[serde(default)]
+        tools: Vec<RawTool>,
         max_tokens: Option<u32>,
         timeout_ms: Option<u64>,
+        max_retries: Option<u32>,
+        retry_backoff_ms: Option<u64>,
         agent_id: Option<String>,
     }
 
@@ -124,19 +310,40 @@ pub fn parse_request(params_json: &[u8]) -> Result<ChatCompletionParams, String>
     if raw_messages.is_empty() {
         return Err("messages must not be empty".to_string());
     }
-    let messages = raw_messages
-        .into_iter()
-        .map(|m| Message {
+    let mut messages = Vec::with_capacity(raw_messages.len());
+    for m in raw_messages {
+        let (content, images) = parse_content_value(m.content)?;
+        messages.push(Message {
             role: m.role,
-            content: m.content,
+            content,
+            images,
+        });
+    }
+
+    let tools: Vec<ToolSpec> = raw
+        .tools
+        .into_iter()
+        .map(|t| ToolSpec {
+            name: t.name,
+            description: t.description,
+            input_schema: t.input_schema,
         })
         .collect();
+    validate_tools(&tools)?;
 
     let max_tokens = raw
         .max_tokens
         .unwrap_or(DEFAULT_MAX_TOKENS)
         .min(MAX_MAX_TOKENS);
     let timeout_ms = raw.timeout_ms.unwrap_or(MAX_TIMEOUT_MS).min(MAX_TIMEOUT_MS);
+    let max_retries = raw
+        .max_retries
+        .unwrap_or(DEFAULT_MAX_RETRIES)
+        .min(MAX_RETRIES);
+    let retry_backoff_ms = raw
+        .retry_backoff_ms
+        .unwrap_or(DEFAULT_RETRY_BACKOFF_MS)
+        .min(MAX_RETRY_BACKOFF_MS);
 
     Ok(ChatCompletionParams {
         provider,
@@ -146,6 +353,9 @@ pub fn parse_request(params_json: &[u8]) -> Result<ChatCompletionParams, String>
         messages,
         max_tokens,
         timeout_ms,
+        tools,
+        max_retries,
+        retry_backoff_ms,
         agent_id,
         system_prompt: None,
     })
@@ -159,6 +369,8 @@ pub struct EmbeddingParams {
     pub api_key_env: String,
     pub input: String,
     pub timeout_ms: u64,
+    pub max_retries: u32,
+    pub retry_backoff_ms: u64,
     pub agent_id: Option<String>,
 }
 
@@ -171,6 +383,8 @@ pub fn parse_embedding_request(params_json: &[u8]) -> Result<EmbeddingParams, St
         api_key_env: Option<String>,
         input: Option<String>,
         timeout_ms: Option<u64>,
+        max_retries: Option<u32>,
+        retry_backoff_ms: Option<u64>,
         agent_id: Option<String>,
     }
     let raw: Raw =
@@ -207,6 +421,14 @@ pub fn parse_embedding_request(params_json: &[u8]) -> Result<EmbeddingParams, St
         return Err("input too long (max 10000)".to_string());
     }
     let timeout_ms = raw.timeout_ms.unwrap_or(MAX_TIMEOUT_MS).min(MAX_TIMEOUT_MS);
+    let max_retries = raw
+        .max_retries
+        .unwrap_or(DEFAULT_MAX_RETRIES)
+        .min(MAX_RETRIES);
+    let retry_backoff_ms = raw
+        .retry_backoff_ms
+        .unwrap_or(DEFAULT_RETRY_BACKOFF_MS)
+        .min(MAX_RETRY_BACKOFF_MS);
     Ok(EmbeddingParams {
         provider,
         base_url,
@@ -214,6 +436,8 @@ pub fn parse_embedding_request(params_json: &[u8]) -> Result<EmbeddingParams, St
         api_key_env,
         input,
         timeout_ms,
+        max_retries,
+        retry_backoff_ms,
         agent_id,
     })
 }
@@ -349,5 +573,218 @@ mod tests {
     fn is_allowed_key_env_rejects_everything_when_empty() {
         let allowed = parse_allowed_key_envs("");
         assert!(!is_allowed_key_env("ANTHROPIC_API_KEY", &allowed));
+    }
+
+    #[test]
+    fn accepts_plain_string_content_with_default_retries() {
+        let params = parse_request(valid_anthropic_json().to_string().as_bytes()).unwrap();
+        assert_eq!(params.messages[0].images, Vec::new());
+        assert_eq!(params.messages[0].content, "hi");
+        assert_eq!(params.max_retries, DEFAULT_MAX_RETRIES);
+        assert_eq!(params.retry_backoff_ms, DEFAULT_RETRY_BACKOFF_MS);
+        assert!(params.tools.is_empty());
+    }
+
+    #[test]
+    fn parses_content_blocks_with_image() {
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "claude-sonnet-5",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "what is this?"},
+                    {"type": "image", "mime_type": "image/png", "data_base64": "aGVsbG8="}
+                ]
+            }]
+        });
+        let params = parse_request(body.to_string().as_bytes()).unwrap();
+        assert_eq!(params.messages[0].content, "what is this?");
+        assert_eq!(params.messages[0].images.len(), 1);
+        assert_eq!(params.messages[0].images[0].mime_type, "image/png");
+    }
+
+    #[test]
+    fn joins_multiple_text_blocks() {
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": "one"},
+                {"type": "text", "text": "two"}
+            ]}]
+        });
+        let params = parse_request(body.to_string().as_bytes()).unwrap();
+        assert_eq!(params.messages[0].content, "one\ntwo");
+    }
+
+    #[test]
+    fn rejects_unsupported_image_mime() {
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": [
+                {"type": "image", "mime_type": "image/bmp", "data_base64": "aGk="}
+            ]}]
+        });
+        let err = parse_request(body.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("unsupported image mime_type"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_invalid_base64_image_data() {
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": [
+                {"type": "image", "mime_type": "image/png", "data_base64": "!!!not base64!!!"}
+            ]}]
+        });
+        let err = parse_request(body.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("not valid base64"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_oversized_image() {
+        use base64::Engine;
+        let big = vec![0u8; MAX_IMAGE_BYTES + 1];
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&big);
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": [
+                {"type": "image", "mime_type": "image/png", "data_base64": encoded}
+            ]}]
+        });
+        let err = parse_request(body.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("too large"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_too_many_images_in_one_message() {
+        let blocks: Vec<serde_json::Value> = (0..=MAX_IMAGES_PER_MESSAGE)
+            .map(|_| {
+                serde_json::json!({"type": "image", "mime_type": "image/png", "data_base64": "aGk="})
+            })
+            .collect();
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": blocks}]
+        });
+        let err = parse_request(body.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("too many images"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_unknown_content_block_type() {
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": [{"type": "video", "url": "x"}]}]
+        });
+        let err = parse_request(body.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("unsupported content block type"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_non_string_non_array_content() {
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": 42}]
+        });
+        let err = parse_request(body.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("string or an array"), "error was: {err}");
+    }
+
+    #[test]
+    fn parses_tools_and_defaults_schema() {
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "claude-sonnet-5",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [
+                {"name": "launch", "description": "Launch an app"},
+                {"name": "sys_info", "input_schema": {"type": "object", "properties": {}}}
+            ]
+        });
+        let params = parse_request(body.to_string().as_bytes()).unwrap();
+        assert_eq!(params.tools.len(), 2);
+        assert_eq!(params.tools[0].name, "launch");
+        assert_eq!(params.tools[0].input_schema["type"], "object");
+        assert_eq!(params.tools[1].description, "");
+    }
+
+    #[test]
+    fn rejects_duplicate_tool_names() {
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [
+                {"name": "launch"},
+                {"name": "launch"}
+            ]
+        });
+        let err = parse_request(body.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("duplicate tool name"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_blank_tool_name_and_non_object_schema() {
+        let base = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": "hi"}]
+        });
+        let mut bad_name = base.clone();
+        bad_name["tools"] = serde_json::json!([{"name": " "}]);
+        let err = parse_request(bad_name.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("name must not be empty"), "error was: {err}");
+
+        let mut bad_schema = base;
+        bad_schema["tools"] = serde_json::json!([{"name": "t", "input_schema": []}]);
+        let err = parse_request(bad_schema.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("must be a JSON object"), "error was: {err}");
+    }
+
+    #[test]
+    fn rejects_oversized_tool_schema() {
+        let mut schema = serde_json::json!({"type": "object", "properties": {}});
+        for i in 0..2000 {
+            schema["properties"][format!("prop{i}")] =
+                serde_json::Value::String("x".repeat(64));
+        }
+        let body = serde_json::json!({
+            "provider": "anthropic",
+            "model": "m",
+            "api_key_env": "K",
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [{"name": "t", "input_schema": schema}]
+        });
+        let err = parse_request(body.to_string().as_bytes()).unwrap_err();
+        assert!(err.contains("too large"), "error was: {err}");
+    }
+
+    #[test]
+    fn clamps_retry_params() {
+        let mut body = valid_anthropic_json();
+        body["max_retries"] = 99.into();
+        body["retry_backoff_ms"] = 999_999.into();
+        let params = parse_request(body.to_string().as_bytes()).unwrap();
+        assert_eq!(params.max_retries, MAX_RETRIES);
+        assert_eq!(params.retry_backoff_ms, MAX_RETRY_BACKOFF_MS);
     }
 }

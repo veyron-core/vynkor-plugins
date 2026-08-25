@@ -377,9 +377,13 @@ mod tests {
             messages: vec![request::Message {
                 role: "user".into(),
                 content: "hi".into(),
+                images: Vec::new(),
             }],
             max_tokens: 128,
             timeout_ms: 1000,
+            tools: Vec::new(),
+            max_retries: request::DEFAULT_MAX_RETRIES,
+            retry_backoff_ms: request::DEFAULT_RETRY_BACKOFF_MS,
             agent_id: agent_id.map(str::to_string),
             system_prompt: None,
         }

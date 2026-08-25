@@ -9,25 +9,57 @@ use crate::request::{ChatCompletionParams, EmbeddingParams};
 
 pub struct OpenAiCompatProvider;
 
+fn message_json(m: &crate::request::Message) -> serde_json::Value {
+    if m.images.is_empty() {
+        return serde_json::json!({"role": m.role, "content": m.content});
+    }
+    let mut parts = Vec::with_capacity(1 + m.images.len());
+    if !m.content.is_empty() {
+        parts.push(serde_json::json!({"type": "text", "text": m.content}));
+    }
+    for img in &m.images {
+        parts.push(serde_json::json!({
+            "type": "image_url",
+            "image_url": {"url": format!("data:{};base64,{}", img.mime_type, img.data_base64)}
+        }));
+    }
+    serde_json::json!({"role": m.role, "content": parts})
+}
+
 impl Provider for OpenAiCompatProvider {
     fn build_http_request(&self, params: &ChatCompletionParams, api_key: &str) -> HttpRequestJson {
         let url = format!("{}/chat/completions", params.base_url.trim_end_matches('/'));
 
-        let mut messages: Vec<serde_json::Value> = params
-            .messages
-            .iter()
-            .map(|m| serde_json::json!({"role": m.role, "content": m.content}))
-            .collect();
+        let mut messages: Vec<serde_json::Value> =
+            params.messages.iter().map(message_json).collect();
         if let Some(system) = params.system_prompt.as_deref().filter(|s| !s.is_empty()) {
             messages.insert(0, serde_json::json!({"role": "system", "content": system}));
         }
 
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": params.model,
             "max_tokens": params.max_tokens,
             "messages": messages,
-        })
-        .to_string();
+        });
+        if !params.tools.is_empty() {
+            body["tools"] = serde_json::Value::Array(
+                params
+                    .tools
+                    .iter()
+                    .map(|t| {
+                        serde_json::json!({
+                            "type": "function",
+                            "function": {
+                                "name": t.name,
+                                "description": t.description,
+                                "parameters": t.input_schema,
+                            }
+                        })
+                    })
+                    .collect(),
+            );
+        }
+        let body = body.to_string();
 
         let mut headers = HashMap::new();
         // Omitted when the resolved key is empty (e.g. a local Ollama
@@ -44,14 +76,32 @@ impl Provider for OpenAiCompatProvider {
             headers,
             body,
             timeout_ms: params.timeout_ms,
+            max_retries: params.max_retries,
+            retry_backoff_ms: params.retry_backoff_ms,
         }
     }
 
     fn parse_response(&self, body: &[u8]) -> Result<ChatResult, String> {
         #[derive(serde::Deserialize)]
+        struct RawToolCallFunction {
+            #[serde(default)]
+            name: String,
+            #[serde(default)]
+            arguments: String,
+        }
+        #[derive(serde::Deserialize)]
+        struct RawToolCall {
+            #[serde(default)]
+            id: String,
+            #[serde(default)]
+            function: Option<RawToolCallFunction>,
+        }
+        #[derive(serde::Deserialize)]
         struct ResponseMessage {
             #[serde(default)]
-            content: String,
+            content: Option<String>,
+            #[serde(default)]
+            tool_calls: Vec<RawToolCall>,
         }
         #[derive(serde::Deserialize)]
         struct Choice {
@@ -81,8 +131,22 @@ impl Provider for OpenAiCompatProvider {
             .next()
             .ok_or("openai-compatible response has no choices")?;
 
+        let tool_calls = choice
+            .message
+            .tool_calls
+            .into_iter()
+            .filter_map(|tc| {
+                tc.function.map(|f| super::ToolCall {
+                    id: tc.id,
+                    name: f.name,
+                    arguments_json: f.arguments,
+                })
+            })
+            .collect();
+
         Ok(ChatResult {
-            content: choice.message.content,
+            content: choice.message.content.unwrap_or_default(),
+            tool_calls,
             stop_reason: choice.finish_reason.unwrap_or_default(),
             usage: Usage {
                 input_tokens: resp.usage.prompt_tokens,
@@ -115,6 +179,8 @@ impl EmbeddingProvider for OpenAiCompatProvider {
             headers,
             body,
             timeout_ms: params.timeout_ms,
+            max_retries: params.max_retries,
+            retry_backoff_ms: params.retry_backoff_ms,
         }
     }
 
@@ -161,7 +227,10 @@ impl EmbeddingProvider for OpenAiCompatProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::{Message, Provider as ReqProvider};
+    use crate::request::{
+        ImageBlock, Message, Provider as ReqProvider, ToolSpec, DEFAULT_MAX_RETRIES,
+        DEFAULT_RETRY_BACKOFF_MS,
+    };
 
     fn params(base_url: &str) -> ChatCompletionParams {
         ChatCompletionParams {
@@ -172,9 +241,13 @@ mod tests {
             messages: vec![Message {
                 role: "user".to_string(),
                 content: "hi".to_string(),
+                images: Vec::new(),
             }],
             max_tokens: 1024,
             timeout_ms: 30_000,
+            tools: Vec::new(),
+            max_retries: DEFAULT_MAX_RETRIES,
+            retry_backoff_ms: DEFAULT_RETRY_BACKOFF_MS,
             agent_id: None,
             system_prompt: None,
         }
@@ -189,6 +262,8 @@ mod tests {
             req.headers.get("Authorization").unwrap(),
             "Bearer sk-secret"
         );
+        assert_eq!(req.max_retries, DEFAULT_MAX_RETRIES);
+        assert_eq!(req.retry_backoff_ms, DEFAULT_RETRY_BACKOFF_MS);
     }
 
     #[test]
@@ -205,6 +280,46 @@ mod tests {
     }
 
     #[test]
+    fn image_messages_become_data_url_parts() {
+        let mut p = params("http://x/v1");
+        p.messages[0].images.push(ImageBlock {
+            mime_type: "image/jpeg".to_string(),
+            data_base64: "aGVsbG8=".to_string(),
+        });
+        let req = OpenAiCompatProvider.build_http_request(&p, "k");
+        let body: serde_json::Value = serde_json::from_str(&req.body).unwrap();
+        let content = body["messages"][0]["content"].as_array().unwrap();
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[1]["type"], "image_url");
+        assert_eq!(
+            content[1]["image_url"]["url"],
+            "data:image/jpeg;base64,aGVsbG8="
+        );
+    }
+
+    #[test]
+    fn plain_text_messages_keep_string_content() {
+        let req = OpenAiCompatProvider.build_http_request(&params("http://x/v1"), "k");
+        let body: serde_json::Value = serde_json::from_str(&req.body).unwrap();
+        assert_eq!(body["messages"][0]["content"], "hi");
+    }
+
+    #[test]
+    fn tools_are_wrapped_as_functions_with_parameters() {
+        let mut p = params("http://x/v1");
+        p.tools.push(ToolSpec {
+            name: "launch".to_string(),
+            description: "Launch an app".to_string(),
+            input_schema: serde_json::json!({"type": "object"}),
+        });
+        let req = OpenAiCompatProvider.build_http_request(&p, "k");
+        let body: serde_json::Value = serde_json::from_str(&req.body).unwrap();
+        assert_eq!(body["tools"][0]["type"], "function");
+        assert_eq!(body["tools"][0]["function"]["name"], "launch");
+        assert_eq!(body["tools"][0]["function"]["parameters"]["type"], "object");
+    }
+
+    #[test]
     fn parses_valid_response() {
         let body = serde_json::json!({
             "choices": [{"message": {"role": "assistant", "content": "hello"}, "finish_reason": "stop"}],
@@ -218,6 +333,35 @@ mod tests {
         assert_eq!(result.stop_reason, "stop");
         assert_eq!(result.usage.input_tokens, 4);
         assert_eq!(result.usage.output_tokens, 2);
+        assert!(result.tool_calls.is_empty());
+    }
+
+    #[test]
+    fn parses_tool_calls_and_null_content() {
+        let body = serde_json::json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "launch", "arguments": "{\"app_id\":\"firefox\"}"}
+                    }]
+                },
+                "finish_reason": "tool_calls"
+            }]
+        })
+        .to_string();
+        let result = OpenAiCompatProvider
+            .parse_response(body.as_bytes())
+            .unwrap();
+        assert_eq!(result.content, "");
+        assert_eq!(result.stop_reason, "tool_calls");
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].id, "call_1");
+        assert_eq!(result.tool_calls[0].name, "launch");
+        assert_eq!(result.tool_calls[0].arguments_json, "{\"app_id\":\"firefox\"}");
     }
 
     #[test]

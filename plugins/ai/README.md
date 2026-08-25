@@ -16,6 +16,11 @@ Ollama эмбеддинги (`nomic-embed-text` 768, `mxbai-embed-large` 1024, `
 Используется `vector-db`: когда туда передают `text`, он пересылает его в `ai embedding`
 (модель берётся из Ollama), получает `embedding:[f32]` и сохраняет.
 
+v0.1.1 adds **vision input** (`messages[].content` accepts image blocks),
+**native tool-use passthrough** (`tools` in → `tool_calls` out), and
+**provider-rate-limit retries** (`max_retries`/`retry_backoff_ms`, executed by
+`network`'s `http_request` on HTTP 429/5xx).
+
 **See [`USAGE.md`](./USAGE.md)** for the caller-facing guide: full
 `chat_completion` request/response reference, per-provider examples, every
 error message a caller can hit, and common patterns (multi-turn,
@@ -66,16 +71,38 @@ Request (`ActionRequest.params_json`):
   not just a provider key, and exfiltrate it via a caller-controlled
   `base_url`. Not allowlisted, or unset in both sources → `ACTION_ERROR`;
   the key value never appears in any error string.
-- `messages` — required, non-empty, `{role, content}` pairs.
+- `messages` — required, non-empty. Each message is `{role, content}` where
+  `content` is either a plain string or an array of typed content blocks:
+  - `{"type": "text", "text": "..."}`
+  - `{"type": "image", "mime_type": "image/png|jpeg|gif|webp", "data_base64": "..."}` —
+    max 8 images per message, 5 MiB decoded size each; validated before send.
+- `tools` — optional array of native tool definitions passed through to the
+  provider: `{name, description?, input_schema?}` (`input_schema` is a JSON
+  Schema object, defaulting to an empty object schema; max 64 tools, 32 KiB
+  schema each). The model's invocations come back as output `tool_calls`.
 - `max_tokens` — optional, default `1024`, capped at `8192`.
 - `timeout_ms` — optional, default and cap `30000`.
+- `max_retries` / `retry_backoff_ms` — optional retry policy handed to
+  `network`'s `http_request`, which re-sends on HTTP 429 and transient 5xx
+  with doubling backoff (default `2` retries from `1000` ms; caps `5`/`5000`).
 
 Response (`ActionResponse.data_json`) on success, normalized across both
 providers:
 
 ```json
-{ "content": "...", "stop_reason": "end_turn", "usage": {"input_tokens": 1, "output_tokens": 2} }
+{
+  "content": "...",
+  "tool_calls": [{"id": "toolu_1", "name": "launch", "arguments_json": "{\"app_id\":\"firefox\"}"}],
+  "stop_reason": "tool_use",
+  "usage": {"input_tokens": 1, "output_tokens": 2}
+}
 ```
+
+`tool_calls` is present only when the model requested invocations
+(anthropic `tool_use` blocks / openai `message.tool_calls`); plain-text
+responses keep the exact pre-tools shape. `arguments_json` is the raw
+arguments object serialized to a string — parse it against the tool's own
+`input_schema`.
 
 Errors → `ACTION_ERROR` with a human-readable message: malformed/missing
 request fields, `api_key_env` not on the operator's allowlist or unset,
@@ -181,7 +208,8 @@ model fails.
 
 ## Testing
 
-`cargo test` — 24 unit tests, no live network (provider adapters are
+`cargo test` — unit tests (72 as of 0.1.1) with no live network
+(provider adapters are
 tested against fixture JSON; `network`'s own tests cover the actual HTTP
 send). End-to-end behavior (this README's examples, plus the SSRF
 limitation above) was verified against a real kernel + `network` + `ai` +
