@@ -179,11 +179,19 @@ pub fn opening_messages(goal: &str, context: &str, catalog: &Catalog) -> Vec<Tur
              answer.",
         );
     }
+    if !context.is_empty() {
+        instructions.push_str(
+            "\n\nSession memory: the user message below carries a [SESSION MEMORY] \
+             block — your last exchanges with this user (oldest first). Treat it as \
+             shared history: resolve references like \"she\", \"the same one\", or \
+             \"again\" against it, and never ask for anything it already covers.",
+        );
+    }
     let mut msgs = vec![Turn { role: "user".into(), content: instructions }];
     let goal_msg = if context.is_empty() {
         goal.to_string()
     } else {
-        format!("{goal}\n\nContext:\n{context}")
+        format!("{goal}\n\n---\n[SESSION MEMORY]\n{context}\n[/SESSION MEMORY]")
     };
     msgs.push(Turn { role: "user".into(), content: goal_msg });
     msgs
@@ -568,10 +576,13 @@ mod tests {
         assert!(msgs[0].content.contains("JSON"));
         assert_eq!(msgs[1].role, "user");
         assert!(msgs[1].content.contains("water the plants"));
-        assert!(msgs[1].content.contains("Context:\ngarden only"));
+        assert!(msgs[1].content.contains("[SESSION MEMORY]\ngarden only\n[/SESSION MEMORY]"));
+        // Memory awareness instruction rides only when context exists.
+        assert!(msgs[0].content.contains("Session memory:"));
 
         let no_ctx = opening_messages("just g", "", &cat);
-        assert!(!no_ctx[1].content.contains("Context:"));
+        assert!(!no_ctx[1].content.contains("[SESSION MEMORY]"));
+        assert!(!no_ctx[0].content.contains("Session memory:"));
     }
 
     #[test]
