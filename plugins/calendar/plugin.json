@@ -1,6 +1,6 @@
 {
   "plugin_id": "calendar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "permissions": [
     "PERMISSION_STORAGE",
     "PERMISSION_EVENT_PUBLISH",
@@ -204,6 +204,47 @@
         "required": ["deleted"],
         "additionalProperties": false
       }
+    {
+      "name": "calendar_ics_import",
+      "input": {
+        "type": "object",
+        "properties": {
+          "ics_base64": {
+            "type": "string",
+            "maxLength": 8388608,
+            "description": "Base64-encoded VCALENDAR payload (max ~6 MiB decoded). VEVENTs within [now-1d, now+90d] are upserted keyed by UID — re-importing the same calendar updates in place. RRULEs expand to concrete occurrences (DAILY/WEEKLY/MONTHLY with INTERVAL/COUNT/UNTIL/BYDAY)."
+          }
+        },
+        "required": ["ics_base64"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "imported": { "type": "integer", "description": "Newly created events." },
+          "updated": { "type": "integer", "description": "Existing events refreshed by UID." },
+          "parsed": { "type": "integer", "description": "VEVENTs found in the payload." },
+          "window_days": { "type": "integer" },
+          "event_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["imported", "updated", "parsed", "window_days", "event_ids"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "calendar_ics_export",
+      "input": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ics_base64": { "type": "string", "description": "Base64-encoded VCALENDAR with every stored event (sorted by start_ms)." }
+        },
+        "required": ["ics_base64"],
+        "additionalProperties": false
+      }
     }
   ],
   "$defs": {
@@ -219,6 +260,7 @@
         "remind_before_ms": { "type": "integer", "description": "Reminder lead in ms; null = no reminder." },
         "reminder_fired": { "type": "boolean", "description": "True once the reminder was fired (reset when times change)." },
         "tags": { "type": "array", "items": { "type": "string" } },
+        "ics_uid": { "type": "string", "description": "UID from an ICS import; re-imports upsert by it. null for hand-created events." },
         "created_at_ms": { "type": "integer" },
         "updated_at_ms": { "type": "integer" }
       },

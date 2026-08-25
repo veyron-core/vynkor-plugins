@@ -55,6 +55,7 @@ mod tests {
             remind_before_ms,
             reminder_fired: fired,
             tags: vec![],
+            ics_uid: None,
             created_at_ms: 0,
             updated_at_ms: 0,
         }

@@ -22,6 +22,8 @@ delivery through the [`notify`](../notify/) plugin's gated `notify_send`).
 | `event_list` | `{from_ms?, to_ms?, tag?, limit?, offset?}` | `{events: [...], total}` |
 | `event_update` | `{id, title?, description?, start_ms?, end_ms?, all_day?, remind_before_ms?, tags?}` | `{updated, event}` |
 | `event_delete` | `{id}` | `{deleted}` |
+| `calendar_ics_import` | `{ics_base64}` | `{imported, updated, parsed, window_days, event_ids}` |
+| `calendar_ics_export` | `{}` | `{ics_base64}` |
 
 An event document:
 
@@ -67,6 +69,23 @@ An event document:
 Reading a missing event is `{"found": false}`, deleting a missing one is
 `{"deleted": false}` — neither is an error. Updating a missing event IS an
 error (`ACTION_ERROR`, "event not found").
+
+## ICS import / export (v0.2)
+
+`calendar_ics_import {ics_base64}` decodes and parses a VCALENDAR payload
+and upserts VEVENTs keyed by their `UID` (stored as `ics_uid`) — re-importing
+the same calendar updates in place instead of duplicating. Only occurrences
+inside the window `[now - 1d, now + 90d]` are materialized; RRULEs expand to
+concrete events for `FREQ=DAILY/WEEKLY/MONTHLY` with `INTERVAL`, `COUNT`,
+`UNTIL` and weekly `BYDAY`. `YEARLY` rules keep just the first occurrence.
+VALARM relative triggers (`TRIGGER:-PT15M`) become `remind_before_ms`;
+LOCATION folds into the first description line. TZID values are read as
+naive wall-clock in UTC (documented v1 limitation). Payload cap ~6 MiB,
+hard cap 500 documents per import.
+
+`calendar_ics_export {}` returns every stored event as one base64-encoded
+VCALENDAR (UTC times; all-day events use `VALUE=DATE`; reminders emit a
+DISPLAY VALARM). Round-trips through the importer.
 
 ## Reminder model
 

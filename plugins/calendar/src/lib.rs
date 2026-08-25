@@ -15,10 +15,14 @@
 //! publish-acks are always matched and routed, nothing is dropped (same
 //! rationale as sync-client's custom loop).
 
+pub mod ics;
 pub mod reminders;
 pub mod request;
 pub mod store;
 
+use std::collections::HashMap;
+
+use base64::Engine as _;
 use serde_json::{json, Value};
 use tokio::sync::{mpsc, oneshot};
 use vynkor_sdk::proto::{envelope, Envelope, EventPublish};
@@ -153,6 +157,7 @@ pub async fn handle_action(
                 remind_before_ms: e.remind_before_ms,
                 reminder_fired: false,
                 tags: e.tags,
+                ics_uid: None,
                 created_at_ms: now,
                 updated_at_ms: now,
             };
@@ -241,7 +246,117 @@ pub async fn handle_action(
             let event = deleted.then(|| changed("deleted", &id));
             ok(json!({"deleted": deleted}), event)
         }
+        request::CalendarRequest::Import { ics_base64 } => {
+            import_ics(&db, &ics_base64).await
+        }
+        request::CalendarRequest::Export => export_ics(&db).await,
     }
+}
+
+/// Decode, parse and upsert one ICS payload keyed by `UID`. Events inside the
+/// import window (`[now-1d, now+horizon]`) are created or updated in place —
+/// a re-import of the same calendar never duplicates events. RRULEs expand to
+/// concrete occurrences (first-stage semantics from PLANS.md EXI-01).
+async fn import_ics(db: &store::Db, ics_base64: &str) -> Result<ActionResult, String> {
+    let compact: String = ics_base64.chars().filter(|c| !c.is_ascii_whitespace()).collect();
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(compact.as_bytes())
+        .map_err(|e| format!("params.ics_base64 is not valid base64: {e}"))?;
+    let text = String::from_utf8(decoded)
+        .map_err(|_| "params.ics_base64 does not decode to UTF-8 text".to_string())?;
+    let parsed = ics::parse_ics(&text)?;
+    if parsed.is_empty() {
+        return Err("no VEVENT entries found in the calendar".to_string());
+    }
+
+    let now = store::now_ms();
+    let window_start = now - ics::MS_PER_DAY;
+    let window_end =
+        now.saturating_add(ics::IMPORT_HORIZON_DAYS * ics::MS_PER_DAY);
+
+    let existing = db.list().await?;
+    let mut by_uid: HashMap<String, EventDoc> = existing
+        .into_iter()
+        .filter_map(|doc| doc.ics_uid.clone().map(|uid| (uid, doc)))
+        .collect();
+
+    let mut imported: u64 = 0;
+    let mut updated: u64 = 0;
+    let mut touched_ids: Vec<String> = Vec::new();
+    let mut docs_written: usize = 0;
+
+    for event in &parsed {
+        for start in ics::occurrences(event, window_start, window_end) {
+            if docs_written >= ics::MAX_IMPORT_DOCS {
+                return Err(format!(
+                    "import exceeds {} documents — narrow the calendar or the window",
+                    ics::MAX_IMPORT_DOCS
+                ));
+            }
+            let duration = event.end_ms.map(|end| end - event.start_ms);
+            match by_uid.get_mut(&event.uid) {
+                Some(doc) if !event.uid.is_empty() => {
+                    if doc.start_ms != start || doc.title != event.title {
+                        doc.reminder_fired = false;
+                    }
+                    doc.title = event.title.clone();
+                    doc.description = event.description.clone();
+                    doc.start_ms = start;
+                    doc.end_ms = duration.map(|d| start + d);
+                    doc.all_day = event.all_day;
+                    doc.remind_before_ms = event.remind_before_ms;
+                    doc.updated_at_ms = store::now_ms();
+                    db.put(doc).await?;
+                    touched_ids.push(doc.id.clone());
+                    updated += 1;
+                }
+                _ => {
+                    let id = db.next_id().await?.to_string();
+                    let doc = EventDoc {
+                        id: id.clone(),
+                        title: event.title.clone(),
+                        description: event.description.clone(),
+                        start_ms: start,
+                        end_ms: duration.map(|d| start + d),
+                        all_day: event.all_day,
+                        remind_before_ms: event.remind_before_ms,
+                        reminder_fired: false,
+                        tags: Vec::new(),
+                        ics_uid: (!event.uid.is_empty()).then(|| event.uid.clone()),
+                        created_at_ms: now,
+                        updated_at_ms: now,
+                    };
+                    db.put(&doc).await?;
+                    if !event.uid.is_empty() {
+                        by_uid.insert(event.uid.clone(), doc);
+                    }
+                    touched_ids.push(id);
+                    imported += 1;
+                }
+            }
+            docs_written += 1;
+        }
+    }
+    ok(
+        json!({
+            "imported": imported,
+            "updated": updated,
+            "parsed": parsed.len(),
+            "window_days": ics::IMPORT_HORIZON_DAYS,
+            "event_ids": touched_ids,
+        }),
+        Some(ChangeEvent {
+            event_type: "changed",
+            payload: json!({"op": "imported", "imported": imported, "updated": updated}),
+        }),
+    )
+}
+
+async fn export_ics(db: &store::Db) -> Result<ActionResult, String> {
+    let mut events = db.list().await?;
+    events.sort_by(|a, b| a.start_ms.cmp(&b.start_ms));
+    let text = ics::generate_ics(&events);
+    ok(json!({"ics_base64": base64::engine::general_purpose::STANDARD.encode(text)}), None)
 }
 
 /// Scan all events once and fire every due reminder. Per reminder, in order:
