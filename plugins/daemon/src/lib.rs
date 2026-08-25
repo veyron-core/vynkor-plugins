@@ -20,6 +20,7 @@
 pub mod request;
 
 use serde_json::{json, Value};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
@@ -310,11 +311,53 @@ pub struct DaemonState {
     capturing: AtomicBool,
     turns_completed: AtomicU64,
     last_turn: Mutex<Option<Value>>,
+    /// Short-term conversation memory (session lifetime): the last
+    /// MEMORY_TURNS (prompt, answer) pairs, oldest first. Injected into each
+    /// goal's `context` so follow-ups like "а теперь открой её" resolve.
+    history: Mutex<VecDeque<(String, String)>>,
 }
+
+/// How many recent exchanges ride into the next goal's context.
+const MEMORY_TURNS: usize = 5;
 
 impl DaemonState {
     pub fn new(enabled_at_boot: bool) -> Self {
         Self { enabled: AtomicBool::new(enabled_at_boot), ..Default::default() }
+    }
+
+    /// Remember a finished exchange; evicts beyond [`MEMORY_TURNS`].
+    pub fn remember_turn(&self, prompt: &str, answer: &str) {
+        let mut h = self.history.lock().expect("history poisoned");
+        h.push_back((prompt.to_string(), answer.to_string()));
+        while h.len() > MEMORY_TURNS {
+            h.pop_front();
+        }
+    }
+
+    /// Pull (transcript, answer) out of a finished turn payload and store it.
+    /// Silent/errored turns are not remembered — nothing worth recalling.
+    pub fn remember_exchange(&self, transcript: &str, result: &Value) {
+        let Some(ans) = result.get("answer").and_then(Value::as_str) else {
+            return;
+        };
+        if ans.trim().is_empty() || transcript.trim().is_empty() {
+            return;
+        }
+        self.remember_turn(transcript, ans);
+    }
+
+    /// Rendered context block for the next goal; `None` until the first
+    /// exchange completes.
+    pub fn recent_context(&self) -> Option<String> {
+        let h = self.history.lock().expect("history poisoned");
+        if h.is_empty() {
+            return None;
+        }
+        let mut s = String::from("Недавний диалог с этим пользователем (старые снизу вверх):\n");
+        for (prompt, answer) in h.iter() {
+            s.push_str(&format!("Пользователь: {prompt}\nВин: {answer}\n"));
+        }
+        Some(s)
     }
 
     pub fn enabled(&self) -> bool {
@@ -431,7 +474,7 @@ pub async fn handle_action(
             )
         }
         DaemonRequest::Ask { prompt } => {
-            let answer = run_agent(&rpc, config, &prompt).await?;
+            let answer = run_agent(&rpc, config, &prompt, "").await?;
             let mut spoken = false;
             if let Some(text) = answer.answer.as_deref() {
                 speak(&rpc, config, text).await?;
@@ -475,7 +518,10 @@ pub async fn run_voice_turn(
         },
     };
     let listen_ms = started.elapsed().as_millis() as u64;
-    respond(rpc, config, transcript, started, listen_ms).await
+    let memory_ctx = state.recent_context().unwrap_or_default();
+    let result = respond(rpc, config, transcript.clone(), started, listen_ms, &memory_ctx).await;
+    state.remember_exchange(&transcript, &result);
+    result
 }
 
 /// Think+speak tail shared by every listen flavor: agent round-trip, then
@@ -488,6 +534,7 @@ pub async fn respond(
     transcript: String,
     started: Instant,
     listen_ms: u64,
+    memory_ctx: &str,
 ) -> Value {
     if transcript.trim().is_empty() {
         let mut v = turn_result("silent", transcript, None, false, started, None);
@@ -496,7 +543,7 @@ pub async fn respond(
     }
 
     let t_agent = Instant::now();
-    let answer = match run_agent(rpc, config, &transcript).await {
+    let answer = match run_agent(rpc, config, &transcript, memory_ctx).await {
         Ok(a) => a,
         Err(e) => {
             let mut v =
@@ -718,6 +765,7 @@ async fn wait_for_speech_end(config: &Config, bus: &Bus) -> SpeechEnd {
 pub async fn run_ptt_turn(
     rpc: &Rpc,
     config: &Config,
+    state: &DaemonState,
     rx: &mut tokio::sync::broadcast::Receiver<(String, Value)>,
 ) -> Value {
     let started = Instant::now();
@@ -726,7 +774,10 @@ pub async fn run_ptt_turn(
         Err(e) => return turn_result("error", String::new(), None, false, started, Some(e)),
     };
     let listen_ms = started.elapsed().as_millis() as u64;
-    respond(rpc, config, transcript, started, listen_ms).await
+    let memory_ctx = state.recent_context().unwrap_or_default();
+    let result = respond(rpc, config, transcript.clone(), started, listen_ms, &memory_ctx).await;
+    state.remember_exchange(&transcript, &result);
+    result
 }
 
 /// The long-lived push-to-talk worker (`ptt` mode): idles on the hotkey
@@ -761,7 +812,7 @@ pub async fn ptt_task(
             continue;
         }
         state.set_capturing(true);
-        let result = run_ptt_turn(&rpc, &config, &mut rx).await;
+        let result = run_ptt_turn(&rpc, &config, &state, &mut rx).await;
         state.set_capturing(false);
         state.end_turn(&result);
         let ev = ChangeEvent { event_type: "turn.completed", payload: result };
@@ -806,13 +857,18 @@ async fn ptt_listen(
 /// The think stage: hand the prompt to the agent's goal loop. (Error strings
 /// already name the action — the serve loop prefixes `{action} failed:` on
 /// non-OK replies and [`Rpc::call`] names it on transport failures.)
-async fn run_agent(rpc: &Rpc, config: &Config, prompt: &str) -> Result<AgentAnswer, String> {
+async fn run_agent(
+    rpc: &Rpc,
+    config: &Config,
+    prompt: &str,
+    memory_ctx: &str,
+) -> Result<AgentAnswer, String> {
+    let mut body = json!({ "goal": prompt, "max_steps": config.max_steps });
+    if !memory_ctx.is_empty() {
+        body["context"] = json!(memory_ctx);
+    }
     let goal = rpc
-        .call(
-            "goal_start",
-            json!({ "goal": prompt, "max_steps": config.max_steps }),
-            config.goal_timeout_ms,
-        )
+        .call("goal_start", body, config.goal_timeout_ms)
         .await?;
     Ok(AgentAnswer {
         goal_id: goal["id"].as_str().unwrap_or_default().to_string(),

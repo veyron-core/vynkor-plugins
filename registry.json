@@ -110,6 +110,13 @@
         "signature": "cbce160b097880869a8c8d2b64f9a17f3efbbd5f240ccef694d3b1d746ff66ddbe67fea50372aa5e935bf57daa3efcda4c0d039b18a1eb9d00734f9b9d563004",
         "min_kernel_version": "0.1.0",
         "max_kernel_version": "*"
+      },
+      "0.1.2": {
+        "archive_url": "dist/daemon/versions/0.1.2/daemon-0.1.2.zip",
+        "sha256": "fd4cfdae0510fea57ea19fd870f50d2f7b4386e5c35152784427e02d235566b2",
+        "signature": "6b35a8c739fad991d63ce48cb6eabb51ef56ab4a8f0081ac6ca4dcc751ae0e07eb8272598320af27bef839c9812cb5622c879dce0160c1e1d14201c6d66a4f0d",
+        "min_kernel_version": "0.1.0",
+        "max_kernel_version": "*"
       }
     }
   },
