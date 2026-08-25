@@ -32,6 +32,20 @@ pub const FALLBACK_AGENT_ENV: &str = "AGENT_PLUGIN_FALLBACK_AGENT_ID";
 /// `off` restores the pure text protocol.
 pub const NATIVE_TOOLS_ENV: &str = "AGENT_PLUGIN_NATIVE_TOOLS";
 
+/// Retries agent asks `ai` to run on provider 429/5xx. Default 0 on
+/// purpose: ai's serve loop is sequential — every retried attempt blocks
+/// it past the kernel watchdog (~40s), so interactive goals must fail fast
+/// into [`chat_with_fallback`]'s profile swap instead.
+pub const AI_MAX_RETRIES_ENV: &str = "AGENT_PLUGIN_AI_MAX_RETRIES";
+
+pub fn ai_max_retries() -> u32 {
+    std::env::var(AI_MAX_RETRIES_ENV)
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(0)
+        .min(5)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeMode {
     Auto,
@@ -235,6 +249,7 @@ pub async fn chat(
     }
     params.insert("max_tokens".into(), json!(plan.max_tokens));
     params.insert("timeout_ms".into(), json!(CHAT_TIMEOUT_MS));
+    params.insert("max_retries".into(), json!(ai_max_retries()));
 
     let v = rpc.call("chat_completion", Value::Object(params), CHAT_TIMEOUT_MS).await?;
     let content = v
@@ -600,6 +615,18 @@ mod tests {
         // Here just assert the guard constants line up with ai's cap.
         assert_eq!(CHAT_TIMEOUT_MS, 30_000);
         let _ = plan;
+    }
+
+    #[test]
+    fn ai_max_retries_parses_and_clamps_with_zero_default() {
+        assert_eq!(ai_max_retries(), 0);
+        std::env::set_var(AI_MAX_RETRIES_ENV, "2");
+        assert_eq!(ai_max_retries(), 2);
+        std::env::set_var(AI_MAX_RETRIES_ENV, "99");
+        assert_eq!(ai_max_retries(), 5);
+        std::env::set_var(AI_MAX_RETRIES_ENV, "junk");
+        assert_eq!(ai_max_retries(), 0);
+        std::env::remove_var(AI_MAX_RETRIES_ENV);
     }
 
     #[test]
