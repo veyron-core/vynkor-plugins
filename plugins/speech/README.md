@@ -30,4 +30,6 @@ keys, T-19), `PERMISSION_AUDIO_STREAM` + `PERMISSION_IPC_SEND`
 Everything comes from the legacy env vars verbatim — see
 `plugins/tts/config.example.yaml` + `plugins/stt/config.example.yaml`
 (model dirs/types, voices, key allowlists, `TTS_PLUGIN_IPC_TARGETS`,
-`STT_PLUGIN_VAD`). `config.example.yaml` here shows the skeleton.
+`STT_PLUGIN_VAD`). `config.example.yaml` here shows the skeleton. The
+kernel's `max_vmem_mb` default is 2048 MiB (0 = unlimited); both sherpa
+models may be resident, so keep it ≥ model size + workspace.

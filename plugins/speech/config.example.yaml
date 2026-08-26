@@ -11,4 +11,4 @@ plugins:
     max_restarts: 5
     sandbox: true          # no sockets of its own; network does egress
     grace_seconds: 10
-    max_vmem_mb: 1024      # both sherpa models may be resident
+    max_vmem_mb: 2048      # both sherpa models may be resident (kernel default 2048; 0 = unlimited)

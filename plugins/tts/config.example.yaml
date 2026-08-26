@@ -64,5 +64,7 @@ plugins:
     max_procs: 64
     # Local inference loads the model into RAM. Kokoro f32 is ~310 MB,
     # int8 ~88 MB; the piper medium model ~100 MB. Keep this above the
-    # model size plus workspace. Cloud-only installs can stay at 512.
-    max_vmem_mb: 1024
+    # model size plus workspace. The kernel default is 2048 (raised from 512
+    # in 2026-08-26 because ONNX Runtime reserves ~500 MB of virtual address
+    # space at init); 0 = unlimited. Cloud-only installs can omit this.
+    max_vmem_mb: 2048

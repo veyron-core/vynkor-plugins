@@ -41,7 +41,9 @@ so it's safe to run with `sandbox: true`. `network` still needs
 
 The local provider loads a model into RAM at first use; size `max_vmem_mb`
 above the model size (Kokoro f32 ≈ 310 MB, int8 ≈ 88 MB; piper medium ≈
-100 MB). See `config.example.yaml`.
+100 MB). The kernel default is 2048 MiB (raised from 512 in 2026-08-26
+because ONNX Runtime reserves ~500 MiB of virtual address space at init);
+`0` means unlimited. See `config.example.yaml`.
 
 ### Build dependency: libmp3lame
 
