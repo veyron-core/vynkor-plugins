@@ -256,7 +256,9 @@ provider's current list.
 
 ```jsonc
 // Gemini free tier — 0. OpenAI-compatible endpoint; key from
-// https://aistudio.google.com/apikey . Free tier is rate-limited (~10-15
+// Verified live 2026-08-26: chat answered in ~6s, embeddings via
+// gemini-embedding-001 (3072-dim) work through ai.embedding.
+// Free tier is rate-limited (~10-15
 // req/min on flash models), so keep max_retries >= 2 and expect 429s on
 // bursty agent loops.
 //
@@ -267,7 +269,7 @@ provider's current list.
 {
   "provider": "openai",
   "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3.5-flash-lite",
   "api_key_env": "GEMINI_API_KEY",
   "max_tokens": 4096,
   "messages": [{"role": "user", "content": "hi"}]
