@@ -76,6 +76,7 @@ fn err(action_id: String, error: String) -> ActionResponse {
 }
 
 async fn dispatch(client: &mut VynkorClient, req: vynkor_sdk::proto::ActionRequest) -> Envelope {
+    eprintln!("[speech] dispatch {} ({} bytes params)", req.action, req.params_json.len());
     let reply = match req.action.as_str() {
         // ---- synthesis (the old `tts`) ---------------------------------
         "tts_synthesize" => {
@@ -106,8 +107,8 @@ async fn dispatch(client: &mut VynkorClient, req: vynkor_sdk::proto::ActionReque
         },
     };
     let reply = match reply {
-        Ok(data_json) => ok(req.action_id, data_json),
-        Err(error) => err(req.action_id, error),
+        Ok(data_json) => { eprintln!("[speech] dispatch done ok"); ok(req.action_id, data_json) }
+        Err(error) => { eprintln!("[speech] dispatch err: {error}"); err(req.action_id, error) }
     };
     Envelope { payload: Some(envelope::Payload::ActionResponse(reply)), ..Default::default() }
 }
@@ -124,6 +125,7 @@ async fn serve(mut client: VynkorClient) -> Result<(), VynkorError> {
         )));
     }
     println!("[{PLUGIN_ID}] registered with kernel");
+    println!("[{PLUGIN_ID}] ipc_targets from env: {:?}", ipc_targets());
 
     let vad_cfg = listen::vad::VadConfig::from_env();
     if vad_cfg.enabled {
