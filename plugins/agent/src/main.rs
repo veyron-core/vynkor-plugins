@@ -25,7 +25,7 @@ use vynkor_sdk::proto::{
 use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "agent";
-const PLUGIN_VERSION: &str = "0.2.0";
+const PLUGIN_VERSION: &str = "0.1.4";
 const ACTIONS: [&str; 8] = [
     "goal_start",
     "goal_get",

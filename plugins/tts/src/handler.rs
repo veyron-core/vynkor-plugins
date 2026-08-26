@@ -39,9 +39,11 @@ pub async fn handle_tts_synthesize(
     let result = match params.provider {
         ProviderKind::Sherpa => {
             let p = params.clone();
-            tokio::task::spawn_blocking(move || crate::provider::sherpa::synthesize(&p))
-                .await
-                .map_err(|e| format!("sherpa synthesize task failed: {e}"))??
+            eprintln!("[tts] entering sherpa synthesize (blocking)");
+            let r = tokio::task::spawn_blocking(move || crate::provider::sherpa::synthesize(&p))
+                .await;
+            eprintln!("[tts] sherpa synthesize returned");
+            r.map_err(|e| format!("sherpa synthesize task failed: {e}"))??
         }
         ProviderKind::OpenAi | ProviderKind::ElevenLabs => {
             synthesize_cloud(client, &params).await?
@@ -194,7 +196,11 @@ pub async fn handle_tts_speak(
 
     let duration_seconds = samples.len() as f32 / model_rate.max(1) as f32;
     let total = packets.len();
+    let started = std::time::Instant::now();
     for (idx, packet) in packets.into_iter().enumerate() {
+        if idx == 0 {
+            eprintln!("[tts] time-to-first-audio: {} ms", started.elapsed().as_millis());
+        }
         let chunk = AudioStreamChunk {
             stream_id: params.stream_id,
             codec: AudioCodec::Opus as i32,
@@ -269,7 +275,14 @@ pub async fn handle_tts_speak_stream(
         duration_seconds += samples.len() as f32 / model_rate.max(1) as f32;
 
         let count = packets.len();
+        let sentence_started = std::time::Instant::now();
         for (pi, packet) in packets.into_iter().enumerate() {
+            if pi == 0 && idx == 0 {
+                eprintln!(
+                    "[tts] time-to-first-audio (stream): {} ms (first of {total_sentences} sentences)",
+                    sentence_started.elapsed().as_millis()
+                );
+            }
             let chunk = AudioStreamChunk {
                 stream_id: params.stream_id,
                 codec: AudioCodec::Opus as i32,

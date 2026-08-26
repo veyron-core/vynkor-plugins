@@ -1,6 +1,6 @@
 {
   "plugin_id": "calendar",
-  "version": "0.2.0",
+  "version": "0.1.1",
   "permissions": [
     "PERMISSION_STORAGE",
     "PERMISSION_EVENT_PUBLISH",
@@ -12,7 +12,10 @@
   },
   "binary": "calendar",
   "events": [],
-  "files": ["calendar", "plugin.json"],
+  "files": [
+    "calendar",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "event_create",
@@ -51,21 +54,34 @@
           },
           "tags": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "maxItems": 32,
             "description": "Tags: trimmed, empties dropped, deduplicated, each ≤64 bytes. Optional."
           }
         },
-        "required": ["title", "start_ms"],
+        "required": [
+          "title",
+          "start_ms"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "description": "Assigned event id (monotonic counter)." },
-          "event": { "$ref": "#/$defs/event" }
+          "id": {
+            "type": "string",
+            "description": "Assigned event id (monotonic counter)."
+          },
+          "event": {
+            "$ref": "#/$defs/event"
+          }
         },
-        "required": ["id", "event"],
+        "required": [
+          "id",
+          "event"
+        ],
         "additionalProperties": false
       }
     },
@@ -74,18 +90,29 @@
       "input": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "found": { "type": "boolean" },
-          "event": { "$ref": "#/$defs/event" }
+          "found": {
+            "type": "boolean"
+          },
+          "event": {
+            "$ref": "#/$defs/event"
+          }
         },
-        "required": ["found"],
+        "required": [
+          "found"
+        ],
         "additionalProperties": false
       }
     },
@@ -127,7 +154,9 @@
         "properties": {
           "events": {
             "type": "array",
-            "items": { "$ref": "#/$defs/event" },
+            "items": {
+              "$ref": "#/$defs/event"
+            },
             "description": "Sorted by start_ms ascending (id ascending tie-break)."
           },
           "total": {
@@ -135,7 +164,10 @@
             "description": "Count after filtering, before pagination."
           }
         },
-        "required": ["events", "total"],
+        "required": [
+          "events",
+          "total"
+        ],
         "additionalProperties": false
       }
     },
@@ -144,9 +176,20 @@
       "input": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "minLength": 1 },
-          "title": { "type": "string", "maxLength": 512, "description": "Replaces the title when present." },
-          "description": { "type": "string", "maxLength": 4096, "description": "Replaces the description when present." },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "Replaces the title when present."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4096,
+            "description": "Replaces the description when present."
+          },
           "start_ms": {
             "type": "integer",
             "exclusiveMinimum": 0,
@@ -156,7 +199,10 @@
             "type": "integer",
             "description": "Replaces the end when present; resets reminder_fired. Must be >= resulting start_ms."
           },
-          "all_day": { "type": "boolean", "description": "Replaces the flag when present." },
+          "all_day": {
+            "type": "boolean",
+            "description": "Replaces the flag when present."
+          },
           "remind_before_ms": {
             "type": "integer",
             "minimum": 0,
@@ -165,21 +211,32 @@
           },
           "tags": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "maxItems": 32,
             "description": "Replaces the whole tag set when present."
           }
         },
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "updated": { "type": "boolean" },
-          "event": { "$ref": "#/$defs/event" }
+          "updated": {
+            "type": "boolean"
+          },
+          "event": {
+            "$ref": "#/$defs/event"
+          }
         },
-        "required": ["updated", "event"],
+        "required": [
+          "updated",
+          "event"
+        ],
         "additionalProperties": false
       }
     },
@@ -188,9 +245,14 @@
       "input": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -201,9 +263,12 @@
             "description": "True only when the event existed and was removed."
           }
         },
-        "required": ["deleted"],
+        "required": [
+          "deleted"
+        ],
         "additionalProperties": false
       }
+    },
     {
       "name": "calendar_ics_import",
       "input": {
@@ -215,19 +280,43 @@
             "description": "Base64-encoded VCALENDAR payload (max ~6 MiB decoded). VEVENTs within [now-1d, now+90d] are upserted keyed by UID — re-importing the same calendar updates in place. RRULEs expand to concrete occurrences (DAILY/WEEKLY/MONTHLY with INTERVAL/COUNT/UNTIL/BYDAY)."
           }
         },
-        "required": ["ics_base64"],
+        "required": [
+          "ics_base64"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "imported": { "type": "integer", "description": "Newly created events." },
-          "updated": { "type": "integer", "description": "Existing events refreshed by UID." },
-          "parsed": { "type": "integer", "description": "VEVENTs found in the payload." },
-          "window_days": { "type": "integer" },
-          "event_ids": { "type": "array", "items": { "type": "string" } }
+          "imported": {
+            "type": "integer",
+            "description": "Newly created events."
+          },
+          "updated": {
+            "type": "integer",
+            "description": "Existing events refreshed by UID."
+          },
+          "parsed": {
+            "type": "integer",
+            "description": "VEVENTs found in the payload."
+          },
+          "window_days": {
+            "type": "integer"
+          },
+          "event_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         },
-        "required": ["imported", "updated", "parsed", "window_days", "event_ids"],
+        "required": [
+          "imported",
+          "updated",
+          "parsed",
+          "window_days",
+          "event_ids"
+        ],
         "additionalProperties": false
       }
     },
@@ -240,9 +329,14 @@
       "output": {
         "type": "object",
         "properties": {
-          "ics_base64": { "type": "string", "description": "Base64-encoded VCALENDAR with every stored event (sorted by start_ms)." }
+          "ics_base64": {
+            "type": "string",
+            "description": "Base64-encoded VCALENDAR with every stored event (sorted by start_ms)."
+          }
         },
-        "required": ["ics_base64"],
+        "required": [
+          "ics_base64"
+        ],
         "additionalProperties": false
       }
     }
@@ -251,18 +345,50 @@
     "event": {
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "description": { "type": "string" },
-        "start_ms": { "type": "integer", "description": "Unix time in milliseconds (UTC)." },
-        "end_ms": { "type": "integer", "description": "Unix time in milliseconds; null when unset." },
-        "all_day": { "type": "boolean" },
-        "remind_before_ms": { "type": "integer", "description": "Reminder lead in ms; null = no reminder." },
-        "reminder_fired": { "type": "boolean", "description": "True once the reminder was fired (reset when times change)." },
-        "tags": { "type": "array", "items": { "type": "string" } },
-        "ics_uid": { "type": "string", "description": "UID from an ICS import; re-imports upsert by it. null for hand-created events." },
-        "created_at_ms": { "type": "integer" },
-        "updated_at_ms": { "type": "integer" }
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "start_ms": {
+          "type": "integer",
+          "description": "Unix time in milliseconds (UTC)."
+        },
+        "end_ms": {
+          "type": "integer",
+          "description": "Unix time in milliseconds; null when unset."
+        },
+        "all_day": {
+          "type": "boolean"
+        },
+        "remind_before_ms": {
+          "type": "integer",
+          "description": "Reminder lead in ms; null = no reminder."
+        },
+        "reminder_fired": {
+          "type": "boolean",
+          "description": "True once the reminder was fired (reset when times change)."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ics_uid": {
+          "type": "string",
+          "description": "UID from an ICS import; re-imports upsert by it. null for hand-created events."
+        },
+        "created_at_ms": {
+          "type": "integer"
+        },
+        "updated_at_ms": {
+          "type": "integer"
+        }
       },
       "required": [
         "id",

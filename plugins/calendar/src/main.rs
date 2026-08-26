@@ -28,7 +28,7 @@ use vynkor_sdk::proto::{
 use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "calendar";
-const PLUGIN_VERSION: &str = "0.2.0";
+const PLUGIN_VERSION: &str = "0.1.1";
 const ACTIONS: [&str; 7] = [
     "event_create",
     "event_get",
