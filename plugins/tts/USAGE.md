@@ -250,6 +250,16 @@ routed like any other message and there is no ack. A caller that needs
 delivery guarantees should target a local plugin and handle absence of the
 terminal `end_of_stream` chunk as a failure.
 
+### `tts_speak_stream` — sentence-level streaming (EXI-02)
+
+Same params and wire shape as [`tts_speak`](#action-tts_speak) (local
+`sherpa` only), but the text is split into sentences first and each is
+synthesized, Opus-encoded and streamed in turn — the peer starts hearing
+audio after one phrase instead of after the whole paragraph. Only the final
+packet of the final sentence carries `end_of_stream`. The response summary
+adds `"sentences": N`. Use it for conversational paragraphs; keep
+`tts_speak` for single short phrases (identical result, one less split).
+
 ## Errors
 
 Every failure is `ACTION_ERROR` with a human-readable message in

@@ -54,6 +54,16 @@ plugins:
       #   Arch: sudo pacman -S libpulse   (paplay)  or  pipewire  (pw-play);
       #         sudo pacman -S ffmpeg     (ffplay)
       # - NOTIFY_PLUGIN_AUDIO_PLAYER=paplay
+
+      # --- INT-02: push to the phone via ntfy/Gotify (push_send action) ---
+      # Comma-separated host allowlist; a caller-named server outside it is
+      # rejected. Default when unset: ntfy.sh. Add self-hosted hosts here.
+      # - NOTIFY_PLUGIN_PUSH_SERVERS=ntfy.sh,push.self.example:8443
+      # Optional auth tokens, sent in headers (never URLs/logs):
+      #   ntfy   -> Authorization: Bearer <token>
+      #   gotify -> X-Gotify-Token: <token>
+      # - NOTIFY_PLUGIN_NTFY_TOKEN=...
+      # - NOTIFY_PLUGIN_GOTIFY_TOKEN=...
     grace_seconds: 10
     max_procs: 64
     max_vmem_mb: 512

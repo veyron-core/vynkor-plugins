@@ -153,6 +153,11 @@ receiving peer, the audio goes out as `AudioStreamChunk` envelopes (codec
 response is a summary (`codec`/`stream_id`/`packets`/`duration_seconds`).
 Requires `PERMISSION_AUDIO_STREAM`.
 
+`tts_speak_stream` (EXI-02) takes the same request shape but splits the text
+into sentences (RU/EN abbreviation-aware) and streams each as it finishes —
+first audio lands after one phrase, not after the whole paragraph; only the
+last packet carries `end_of_stream`. See USAGE.md.
+
 ## Configuration
 
 `tts` reads no config file itself — settings are environment variables

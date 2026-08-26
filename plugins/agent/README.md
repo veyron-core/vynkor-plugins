@@ -97,6 +97,27 @@ Returns the effective catalog the model sees:
 `{tools: [{name, description, parameters, requires_confirmation,
 timeout_ms}], allowed_actions, tools_file_set}`.
 
+### `memory_forget` / `memory_clear` / `memory_list` (AGT-01, opt-in)
+
+With `AGENT_PLUGIN_MEMORY=on`, completed goals get an extraction pass (one
+extra cheap `chat_completion`) and durable facts land in the `vector-db`
+plugin (embedding routed through `ai`), collection
+`AGENT_PLUGIN_MEMORY_COLLECTION` (default `agent-memory`). Fresh goals
+recall up-to-5 similar facts scoring ≥0.72 into the transcript as a leading
+`[KNOWN CONTEXT]` turn.
+
+```json
+{"query": "which server does the user run"}  // → {"forgotten": true, "id": "f1787…-0"}
+{}                                           // clear → {"cleared": 12}; list → {"total": n, "facts": [...]}
+```
+
+`forget` deletes the top semantic match above the score floor; `clear`
+wipes every indexed fact deterministically (vector-db has no collection
+wipe, so ids live in our own `database` key `memory:index`). Extraction/
+recall failures log loudly and never fail a goal. Memory is **off** by
+default — turning it on is a privacy decision; all state stays in this
+plugin's per-caller namespaces.
+
 ## Tool catalog (operator-gated, manifest-discovered)
 
 The catalog is built from three layers, merged per allowlisted action name
