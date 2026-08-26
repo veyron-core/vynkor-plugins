@@ -28,9 +28,16 @@ use vynkor_sdk::proto::{
 use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "calendar";
-const PLUGIN_VERSION: &str = "0.1.0";
-const ACTIONS: [&str; 5] =
-    ["event_create", "event_get", "event_list", "event_update", "event_delete"];
+const PLUGIN_VERSION: &str = "0.1.1";
+const ACTIONS: [&str; 7] = [
+    "event_create",
+    "event_get",
+    "event_list",
+    "event_update",
+    "event_delete",
+    "calendar_ics_import",
+    "calendar_ics_export",
+];
 
 fn manifest() -> PluginManifest {
     PluginManifest {

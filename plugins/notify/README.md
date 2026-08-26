@@ -166,6 +166,31 @@ package names).
 to stderr, returns `"spoken": false` plus `"speak_error"`, and the action
 still succeeds — the notification was delivered.
 
+## Action: `push_send` — ntfy/Gotify to the phone (v0.3)
+
+Routes through the `network` plugin's gated `http_request` (same T-19 caller
+model as `ai`/`search`: `notify` holds `PERMISSION_NETWORK`, opens no sockets
+itself, `requires: ["network"]`). JSON publishing APIs only, so UTF-8 text
+needs no header encoding; tokens ride in headers (`Authorization: Bearer` for
+ntfy, `X-Gotify-Token` for gotify), never in URLs or logs.
+
+```json
+{ "provider": "ntfy", "topic": "vyn", "title": "Deploy",
+  "message": "production release rolling out", "priority": 4,
+  "tags": ["white_check_mark"] }
+→ { "pushed": true, "provider": "ntfy", "server": "ntfy.sh", "status": 200 }
+```
+
+- `server` must be on the operator allowlist `NOTIFY_PLUGIN_PUSH_SERVERS`
+  (comma-separated hosts, default `ntfy.sh`; add your self-hosted Gotify
+  host there). A caller-chosen host would make notify an exfiltration
+  channel.
+- Optional tokens from env: `NOTIFY_PLUGIN_NTFY_TOKEN`,
+  `NOTIFY_PLUGIN_GOTIFY_TOKEN`. Absent → anonymous publish.
+- `topic` is required for ntfy (`[A-Za-z0-9_-]{1,64}`), rejected for gotify.
+- Errors → `ACTION_ERROR`: allowlist violation, provider HTTP non-2xx
+  (body snippet included), network failure.
+
 ## Action: `notify_providers`
 
 ```json

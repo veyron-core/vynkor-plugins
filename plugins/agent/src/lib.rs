@@ -24,6 +24,7 @@
 pub mod discovery;
 pub mod engine;
 pub mod llm;
+pub mod memory;
 pub mod request;
 pub mod store;
 pub mod tools;
@@ -351,6 +352,18 @@ pub async fn handle_action(
                 }),
                 None,
             )
+        }
+        AgentRequest::MemoryForget { query } => match memory::forget(&rpc, &query).await? {
+            Some(id) => ok(json!({"forgotten": true, "id": id}), None),
+            None => ok(json!({"forgotten": false, "id": null}), None),
+        },
+        AgentRequest::MemoryClear => {
+            let deleted = memory::clear(&rpc).await?;
+            ok(json!({"cleared": deleted}), None)
+        }
+        AgentRequest::MemoryList => {
+            let facts = memory::list(&rpc).await?;
+            ok(json!({"total": facts.len(), "facts": facts}), None)
         }
     }
 }

@@ -34,6 +34,12 @@ pub enum AgentRequest {
     GoalList { limit: usize },
     GoalResume { id: String, approve: bool },
     ToolsList,
+    /// `memory_forget {"query": "…"}` — delete the top similar fact.
+    MemoryForget { query: String },
+    /// `memory_clear {}` — wipe every stored fact.
+    MemoryClear,
+    /// `memory_list {}` — index contents, newest first.
+    MemoryList,
 }
 
 fn want_string(body: &serde_json::Value, field: &str) -> Result<String, String> {
@@ -171,6 +177,13 @@ pub fn parse_request(action: &str, params_json: &[u8]) -> Result<AgentRequest, S
             Ok(AgentRequest::GoalResume { id, approve })
         }
         "tools_list" => Ok(AgentRequest::ToolsList),
+        "memory_forget" => {
+            let query = want_string(&body, "query")?;
+            check_size("query", &query, 2000)?;
+            Ok(AgentRequest::MemoryForget { query })
+        }
+        "memory_clear" => Ok(AgentRequest::MemoryClear),
+        "memory_list" => Ok(AgentRequest::MemoryList),
         other => Err(format!("ERR_AGENT_BAD_PARAMS: unknown action: {other}")),
     }
 }

@@ -1,0 +1,34 @@
+# Example kernel config.yaml entry for the `automations` plugin (CAP-01).
+# Copy into `plugins:` or a `plugins.d/automations.yaml` drop-in.
+#
+# Rules live in this plugin's own `database` namespace; triggers are kernel
+# event deliveries; dispatch is a kernel-routed action call under THIS
+# plugin's JWT grants — T-19: grant gated targets here explicitly.
+
+plugins:
+  - id: automations
+    binary: /opt/plugins/automations
+    restart: on-failure
+    max_restarts: 5
+    sandbox: true
+    env:
+      # Default-deny subscription set: only these event types can reach
+      # rules. Examples:
+      #   plugin.calendar.due, plugin.scheduler.fired (cron pairing!),
+      #   plugin.sync.sync.delta, plugin.notes.changed,
+      #   hotkey_pressed (as published by the hotkey plugin),
+      #   stt_text
+      - AUTOMATIONS_PLUGIN_EVENT_TYPES=plugin.calendar.due,plugin.scheduler.fired,plugin.hotkey.hotkey_pressed
+    grace_seconds: 10
+    max_procs: 64
+    max_vmem_mb: 256
+
+# Cron-style automation = scheduler schedule firing into an event rule:
+#   1) scheduler.schedule_set {"cron": "0 8 * * *", "fire": {"event": true}}
+#   2) automations.rule_set {
+#        "name": "morning briefing",
+#        "trigger": {"event_type": "plugin.scheduler.fired"},
+#        "conditions": [{"path": "/schedule_id", "equals": "3"}],
+#        "action": {"target_action": "goal_start",
+#                   "params_json": {"goal": "Read my inbox and brief me"}}
+#      }

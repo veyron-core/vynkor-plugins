@@ -30,6 +30,10 @@ pub struct EventDoc {
     pub reminder_fired: bool,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Stable external id from an ICS import (`UID` property); re-imports of
+    /// the same calendar update in place instead of duplicating events.
+    #[serde(default)]
+    pub ics_uid: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
 }

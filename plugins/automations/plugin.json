@@ -1,0 +1,114 @@
+{
+  "plugin_id": "automations",
+  "version": "0.1.0",
+  "permissions": [
+    "PERMISSION_STORAGE",
+    "PERMISSION_EVENT_PUBLISH"
+  ],
+  "kernel_compatibility_range": {
+    "min": "0.1.0",
+    "max": "*"
+  },
+  "binary": "automations",
+  "events": [],
+  "files": ["automations", "plugin.json"],
+  "actions": [
+    {
+      "name": "rule_set",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "description": "Absent = create (assigns id); present = update (engine state preserved)."},
+          "name": {"type": "string", "maxLength": 200},
+          "enabled": {"type": "boolean", "default": true},
+          "trigger": {
+            "type": "object",
+            "properties": {
+              "event_type": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,200}$", "description": "Fully-qualified kernel event type, e.g. plugin.calendar.due or plugin.scheduler.fired. Must be in AUTOMATIONS_PLUGIN_EVENT_TYPES."}
+            },
+            "required": ["event_type"],
+            "additionalProperties": false
+          },
+          "conditions": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {"type": "string", "description": "JSON pointer into the event payload ('' = whole payload)."},
+                "equals": {"description": "Exact value the pointed value must equal."}
+              },
+              "required": ["path", "equals"],
+              "additionalProperties": false
+            },
+            "description": "All conditions must hold (AND). Empty = always."
+          },
+          "action": {
+            "type": "object",
+            "properties": {
+              "target_action": {"type": "string", "minLength": 1, "maxLength": 128},
+              "params_json": {"type": "object", "default": {}}
+            },
+            "required": ["target_action"],
+            "additionalProperties": false,
+            "description": "Kernel-routed action dispatched when the rule fires; runs under automations' own JWT grants (T-19 — operator must grant gated targets)."
+          },
+          "requires_confirmation": {"type": "boolean", "default": false, "description": "true = never auto-dispatch; publishes a needs_confirmation event until re-set with false."},
+          "cooldown_ms": {"type": "integer", "minimum": 0, "default": 0}
+        },
+        "required": ["trigger", "action"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "stored": {"type": "boolean"}
+        },
+        "required": ["id", "stored"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rule_get",
+      "input": {"type": "object", "properties": {"id": {"type": "string", "minLength": 1}}, "required": ["id"], "additionalProperties": false},
+      "output": {
+        "type": "object",
+        "properties": {"found": {"type": "boolean"}, "rule": {"type": "object"}},
+        "required": ["found"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rule_list",
+      "input": {"type": "object", "additionalProperties": false},
+      "output": {
+        "type": "object",
+        "properties": {"total": {"type": "integer"}, "rules": {"type": "array", "items": {"type": "object"}}},
+        "required": ["total", "rules"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rule_delete",
+      "input": {"type": "object", "properties": {"id": {"type": "string", "minLength": 1}}, "required": ["id"], "additionalProperties": false},
+      "output": {
+        "type": "object",
+        "properties": {"deleted": {"type": "boolean"}},
+        "required": ["deleted"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "config_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "AUTOMATIONS_PLUGIN_EVENT_TYPES": {
+        "type": "string",
+        "description": "Comma-separated kernel event types this plugin may subscribe to and match rules on. Default-deny when empty."
+      }
+    },
+    "additionalProperties": true
+  }
+}

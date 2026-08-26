@@ -51,6 +51,10 @@ pub enum CalendarRequest {
     },
     Update { id: String, patch: EventPatch },
     Delete { id: String },
+    /// `calendar_ics_import {ics_base64}` — decode → parse → upsert by UID.
+    Import { ics_base64: String },
+    /// `calendar_ics_export {}` — all events as one VCALENDAR.
+    Export,
 }
 
 #[derive(Deserialize)]
@@ -105,6 +109,15 @@ struct UpdateParams {
     remind_before_ms: Option<i64>,
     #[serde(default)]
     tags: Option<Vec<String>>,
+}
+
+/// ~6 MiB of decoded ICS; generous for a personal calendar, tight enough to
+/// keep one action from flooding `database`.
+pub const MAX_ICS_BASE64_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Deserialize)]
+struct ImportParams {
+    ics_base64: String,
 }
 
 fn check_size(field: &str, value: &str, max: usize) -> Result<(), String> {
@@ -310,6 +323,26 @@ pub fn parse_request(action: &str, params_json: &[u8]) -> Result<CalendarRequest
             let p: IdParams = serde_json::from_slice(params_json)
                 .map_err(|e| format!("invalid params for event_delete, expected {{id}}: {e}"))?;
             Ok(CalendarRequest::Delete { id: require_nonempty_id(p.id)? })
+        }
+        "calendar_ics_import" => {
+            let p: ImportParams = serde_json::from_slice(params_json).map_err(|e| {
+                format!(
+                    "invalid params for calendar_ics_import, expected \
+                     {{ics_base64}}: {e}"
+                )
+            })?;
+            if p.ics_base64.len() > MAX_ICS_BASE64_BYTES {
+                return Err(format!(
+                    "params.ics_base64 exceeds {} bytes",
+                    MAX_ICS_BASE64_BYTES
+                ));
+            }
+            Ok(CalendarRequest::Import { ics_base64: p.ics_base64 })
+        }
+        "calendar_ics_export" => {
+            serde_json::from_slice::<serde::de::IgnoredAny>(params_json)
+                .map_err(|e| format!("invalid params for calendar_ics_export, expected {{}}: {e}"))?;
+            Ok(CalendarRequest::Export)
         }
         other => Err(format!("unknown action: {other}")),
     }

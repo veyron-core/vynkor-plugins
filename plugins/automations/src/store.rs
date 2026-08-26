@@ -1,0 +1,171 @@
+//! Typed storage for `automations` rules over the `database` plugin —
+//! same thin-schema contract as `notes`/`calendar`: kernel-routed actions
+//! only, private namespace stamped by the kernel's `caller_plugin_id`.
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+/// Counter key backing rule ids (atomic via `db_incr`).
+pub const NEXT_ID_KEY: &str = "meta:next_id";
+/// Key prefix for rule documents: `rule:<id>` → JSON [`RuleDoc`].
+pub const KEY_PREFIX: &str = "rule:";
+pub const MAX_RULES: usize = 200;
+
+/// One condition: JSON-pointer path into the event payload plus an exact
+/// expected value. All conditions must hold (AND); empty = always true.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Condition {
+    /// JSON pointer into the event payload, e.g. `/battery_level` (`""` =
+    /// whole payload). Pointer segments with `/` inside are not addressable.
+    pub path: String,
+    pub equals: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Trigger {
+    /// Fully-qualified event type as delivered by the kernel, e.g.
+    /// `plugin.calendar.due`, `plugin.scheduler.fired`,
+    /// `plugin.sync.sync.delta`. Must be in the operator's subscription set.
+    pub event_type: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ActionSpec {
+    /// Kernel-routed action to dispatch when the rule fires.
+    pub target_action: String,
+    /// Params sent verbatim to the target action.
+    #[serde(default)]
+    pub params_json: Value,
+}
+
+/// One automation rule. Stored under `rule:<id>`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuleDoc {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    pub enabled: bool,
+    pub trigger: Trigger,
+    #[serde(default)]
+    pub conditions: Vec<Condition>,
+    pub action: ActionSpec,
+    /// When set, the rule never auto-dispatches; it publishes a
+    /// `needs_confirmation` event instead and the operator re-enables it via
+    /// `rule_set` after review.
+    #[serde(default)]
+    pub requires_confirmation: bool,
+    /// Minimum ms between fires (`0` = fire on every matching event).
+    #[serde(default)]
+    pub cooldown_ms: u64,
+    #[serde(default)]
+    pub last_fired_ms: i64,
+    #[serde(default)]
+    pub last_error: String,
+    #[serde(default)]
+    pub fire_count: u64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+impl RuleDoc {
+    /// All conditions hold against the decoded event payload?
+    pub fn conditions_hold(&self, payload: &Value) -> bool {
+        self.conditions.iter().all(|c| {
+            let actual =
+                if c.path.is_empty() { Some(payload) } else { payload.pointer(&c.path) };
+            actual.map(|v| v == &c.equals).unwrap_or(false)
+        })
+    }
+
+    /// Cooldown satisfied relative to `now_ms`?
+    pub fn cooldown_ok(&self, now_ms: i64) -> bool {
+        self.cooldown_ms == 0
+            || now_ms - self.last_fired_ms >= self.cooldown_ms as i64
+    }
+}
+
+pub struct Db {
+    rpc: crate::Rpc,
+    timeout_ms: u32,
+}
+
+impl Db {
+    pub fn new(rpc: crate::Rpc, timeout_ms: u32) -> Self {
+        Self { rpc, timeout_ms }
+    }
+
+    async fn call(&self, action: &str, params: Value) -> Result<Value, String> {
+        let params_json =
+            serde_json::to_vec(&params).map_err(|e| format!("failed to encode {action} params: {e}"))?;
+        self.rpc.call(action, params_json, self.timeout_ms).await
+    }
+
+    pub async fn next_id(&self) -> Result<u64, String> {
+        let v = self.call("db_incr", serde_json::json!({"key": NEXT_ID_KEY})).await?;
+        v.get("value")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| format!("database.db_incr returned unexpected payload: {v}"))
+    }
+
+    pub async fn put(&self, rule: &RuleDoc) -> Result<(), String> {
+        let key = format!("{KEY_PREFIX}{}", rule.id);
+        let v = self.call("db_set", serde_json::json!({"key": key, "value": rule})).await?;
+        if v.get("ok").and_then(Value::as_bool) != Some(true) {
+            return Err(format!("database.db_set returned unexpected payload: {v}"));
+        }
+        Ok(())
+    }
+
+    pub async fn get(&self, id: &str) -> Result<Option<RuleDoc>, String> {
+        let v = self
+            .call("db_get", serde_json::json!({"key": format!("{KEY_PREFIX}{id}")}))
+            .await?;
+        if v.get("found").and_then(Value::as_bool) != Some(true) {
+            return Ok(None);
+        }
+        serde_json::from_value(v.get("value").cloned().unwrap_or(Value::Null))
+            .map(Some)
+            .map_err(|e| format!("stored rule {id:?} is corrupt: {e}"))
+    }
+
+    pub async fn list(&self) -> Result<Vec<RuleDoc>, String> {
+        let v = self.call("db_keys", serde_json::json!({"prefix": KEY_PREFIX})).await?;
+        let keys: Vec<String> = v
+            .get("keys")
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("database.db_keys returned unexpected payload: {v}"))?
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect();
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+        let v = self.call("db_batch_get", serde_json::json!({"keys": keys})).await?;
+        let values = v
+            .get("values")
+            .and_then(Value::as_object)
+            .ok_or_else(|| format!("database.db_batch_get returned unexpected payload: {v}"))?;
+        Ok(values
+            .values()
+            .filter_map(|value| serde_json::from_value::<RuleDoc>(value.clone()).ok())
+            .collect())
+    }
+
+    pub async fn delete(&self, id: &str) -> Result<bool, String> {
+        let v = self
+            .call("db_delete", serde_json::json!({"key": format!("{KEY_PREFIX}{id}")}))
+            .await?;
+        v.get("deleted")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| format!("database.db_delete returned unexpected payload: {v}"))
+    }
+}
+
+/// Current unix time in milliseconds (same saturating pattern as calendar).
+pub fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
+}

@@ -12,6 +12,7 @@
 use serde_json::{json, Value};
 
 use crate::llm::{self, Reply};
+use crate::memory;
 use crate::store::{self, Db, GoalDoc, StepRec, Turn, STATUS_COMPLETED, STATUS_ERROR,
                    STATUS_MAX_STEPS, STATUS_NEEDS_CONFIRMATION};
 use crate::tools::Catalog;
@@ -99,6 +100,11 @@ pub async fn run(
         Entry::Fresh => {
             doc.status = store::STATUS_RUNNING.to_string();
             doc.transcript = llm::opening_messages(&doc.goal, &doc.context, catalog);
+            if memory::enabled() {
+                if let Some(block) = memory::recall(rpc, &doc.goal).await {
+                    push_turn(doc, "user", block)?;
+                }
+            }
             persist(db, doc).await?;
         }
         Entry::ApprovedResume => {
@@ -163,9 +169,20 @@ pub async fn run(
         match llm::outcome_to_reply(&outcome) {
             Reply::Final(answer) => {
                 doc.status = STATUS_COMPLETED.to_string();
-                doc.final_answer = answer;
+                doc.final_answer = answer.clone();
                 next_step(doc, "final", json!({}));
                 persist(db, doc).await?;
+                if memory::enabled() {
+                    // Detached: extraction is one extra LLM round-trip and
+                    // must not sit between the finished goal and its caller.
+                    let rpc = rpc.clone();
+                    let plan = doc.llm.clone();
+                    let goal_id = doc.id.clone();
+                    let goal = doc.goal.clone();
+                    tokio::spawn(async move {
+                        memory::remember(&rpc, &plan, &goal_id, &goal, &answer).await;
+                    });
+                }
                 return Ok(());
             }
             Reply::ToolCall { name, params } => {

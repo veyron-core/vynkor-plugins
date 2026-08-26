@@ -35,7 +35,7 @@ async fn main() {
     let timeout: u32 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(45_000);
 
     let started = Instant::now();
-    let action_id = "act-cli".to_string();
+    let action_id = format!("act-{}", uuid::Uuid::new_v4().simple());
     client
         .send(
             "kernel",

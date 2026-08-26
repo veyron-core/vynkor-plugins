@@ -1,0 +1,14 @@
+# `speech` = tts + stt in one process (MRG-01). It reads BOTH legacy env
+# surfaces verbatim — copy the env blocks from plugins/tts and plugins/stt
+# config examples unchanged:
+#   TTS_PLUGIN_LOCAL_MODEL_DIR / _TYPE, TTS_PLUGIN_ALLOWED_KEY_ENVS,
+#   TTS_PLUGIN_IPC_TARGETS, ...
+#   STT_PLUGIN_* likewise (incl. STT_PLUGIN_VAD=on for daemon vad mode).
+plugins:
+  - id: speech
+    binary: /opt/plugins/speech
+    restart: on-failure
+    max_restarts: 5
+    sandbox: true          # no sockets of its own; network does egress
+    grace_seconds: 10
+    max_vmem_mb: 1024      # both sherpa models may be resident

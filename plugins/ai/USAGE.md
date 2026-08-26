@@ -222,6 +222,91 @@ Ollama — all speak `/chat/completions`.
 }
 ```
 
+## Brain options by price/speed
+
+All four options below speak the `openai` wire shape — same adapter, only
+`base_url` / `model` / `api_key_env` change. Public hosts are reachable
+through `network`'s default SSRF policy (only private ranges are blocked);
+the local Ollama option additionally needs the loopback allow from
+[Providers](#providers).
+
+| Option | Price | Speed | Tool-calls | Notes |
+|---|---|---|---|---|
+| Ollama (local) | 0 | CPU-bound | yes (model-dependent) | fully offline, no key |
+| Gemini free tier | 0 | fast | yes (compat layer) | rate-limited per minute |
+| Groq free tier | 0 | very fast (LPU) | yes | smaller open models |
+| OpenRouter | pay-per-token | varies by model | yes | one key → hundreds of models |
+
+Every recipe needs its handle in `AI_PLUGIN_ALLOWED_KEY_ENVS` and the key
+stored vault-first or in `env:` (see [Configuration](#configuration) in the
+README). Model names move fast — treat them as examples and check the
+provider's current list.
+
+```jsonc
+// Local Ollama — 0, offline. network env needs:
+//   NETWORK_PLUGIN_ALLOWED_HOSTS=localhost,127.0.0.1
+{
+  "provider": "openai",
+  "base_url": "http://localhost:11434/v1",
+  "model": "qwen3:8b",
+  "api_key_env": "OLLAMA_API_KEY",
+  "messages": [{"role": "user", "content": "hi"}]
+}
+```
+
+```jsonc
+// Gemini free tier — 0. OpenAI-compatible endpoint; key from
+// Verified live 2026-08-26: chat answered in ~6s, embeddings via
+// gemini-embedding-001 (3072-dim) work through ai.embedding.
+// Free tier is rate-limited (~10-15
+// req/min on flash models), so keep max_retries >= 2 and expect 429s on
+// bursty agent loops.
+//
+// Caveats of the compat layer: thinking models spend the max_tokens budget
+// on internal thoughts too — set it generously (4096+) or replies come back
+// empty-truncated; tool-calls work but the function schema subset is narrower
+// than native — verify per model before relying on complex input_schema.
+{
+  "provider": "openai",
+  "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+  "model": "gemini-3.5-flash-lite",
+  "api_key_env": "GEMINI_API_KEY",
+  "max_tokens": 4096,
+  "messages": [{"role": "user", "content": "hi"}]
+}
+```
+
+```jsonc
+// Groq free tier — 0, fastest tokens/sec of the free options. Key from
+// https://console.groq.com/keys .
+{
+  "provider": "openai",
+  "base_url": "https://api.groq.com/openai/v1",
+  "model": "llama-3.3-70b-versatile",
+  "api_key_env": "GROQ_API_KEY",
+  "messages": [{"role": "user", "content": "hi"}]
+}
+```
+
+```jsonc
+// OpenRouter — pay-per-token aggregator; one key covers Claude, Gemini,
+// GPT, open models. Model ids are "vendor/model". Key from
+// https://openrouter.ai/keys .
+{
+  "provider": "openai",
+  "base_url": "https://openrouter.ai/api/v1",
+  "model": "anthropic/claude-sonnet-4.5",
+  "api_key_env": "OPENROUTER_API_KEY",
+  "messages": [{"role": "user", "content": "hi"}]
+}
+```
+
+Running the `agent` plugin on top of any of these works unchanged — point
+`agent`'s model config at the same `base_url`/`model` pair (see
+`plugins/agent/config.example.yaml`). For a first end-to-end check after
+switching providers, run one small goal through the kernel rather than a
+bare `chat_completion`: that exercises vision/tools/retry paths too.
+
 ## Errors
 
 Every failure is an `ACTION_ERROR` with a plain-text `error`. Messages are
