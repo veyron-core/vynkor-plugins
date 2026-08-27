@@ -224,11 +224,15 @@ impl<L: Launcher> LauncherPlugin<L> {
         let mut apps = self.cached_apps(&provider, include_hidden);
         if let Some(q) = query.as_deref() {
             let ql = q.to_lowercase();
-            apps.retain(|a| {
-                a.id.to_lowercase().contains(&ql) || a.name.to_lowercase().contains(&ql)
-            });
+            let mut scored: Vec<(u32, AppEntry)> = apps
+                .into_iter()
+                .filter_map(|a| fuzzy_score(&ql, &a.id.to_lowercase(), &a.name.to_lowercase()).map(|s| (s, a)))
+                .collect();
+            scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
+            apps = scored.into_iter().map(|(_, a)| a).collect();
+        } else {
+            apps.sort_by(|a, b| a.id.cmp(&b.id));
         }
-        apps.sort_by(|a, b| a.id.cmp(&b.id));
         apps.truncate(limit as usize);
         let providers_scanned: Vec<String> = if provider == "auto" {
             vec!["desktop".to_string(), "steam".to_string()]
@@ -249,6 +253,7 @@ impl<L: Launcher> LauncherPlugin<L> {
             .collect();
         Ok(json!({ "apps": json_apps, "providers": providers_scanned }))
     }
+
 
     async fn handle_providers(&self, params: &[u8]) -> Result<serde_json::Value, LauncherError> {
         if !params.is_empty() && params != b"{}" && params != b"null" {
@@ -323,6 +328,40 @@ impl Plugin for LauncherPlugin<RealLauncher> {
             ..Default::default()
         }))
     }
+}
+
+
+fn fuzzy_score(query: &str, id: &str, name: &str) -> Option<u32> {
+    let q = query.trim();
+    if q.is_empty() { return Some(0); }
+    if id == q || name == q { return Some(100); }
+    if id.starts_with(q) { return Some(90); }
+    if name.starts_with(q) { return Some(80); }
+    if id.contains(q) { return Some(70); }
+    if name.contains(q) { return Some(60); }
+    if is_subsequence(q, id) { return Some(40); }
+    if is_subsequence(q, name) { return Some(30); }
+    let id_chars: std::collections::HashSet<char> = id.chars().collect();
+    let name_chars: std::collections::HashSet<char> = name.chars().collect();
+    let q_chars: std::collections::HashSet<char> = q.chars().collect();
+    if q_chars.is_subset(&id_chars) || q_chars.is_subset(&name_chars) {
+        return Some(10);
+    }
+    None
+}
+
+fn is_subsequence(needle: &str, haystack: &str) -> bool {
+    let mut hay = haystack.chars();
+    for c in needle.chars() {
+        loop {
+            match hay.next() {
+                Some(h) if h == c => break,
+                Some(_) => continue,
+                None => return false,
+            }
+        }
+    }
+    true
 }
 
 #[cfg(test)]
