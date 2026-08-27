@@ -798,6 +798,7 @@ mod tests {
             created_at_ms: 0,
             updated_at_ms: 1_787_700_000_000,
             ics_uid: Some("round-trip@test".to_string()),
+            rrule: None,
         };
         let ics = generate_ics(&[doc.clone()]);
         assert!(ics.contains("UID:round-trip@test"));
@@ -828,6 +829,7 @@ mod tests {
             created_at_ms: 0,
             updated_at_ms: 0,
             ics_uid: None,
+            rrule: None,
         };
         let ics = generate_ics(&[doc]);
         assert!(ics.contains("DTSTART;VALUE=DATE:20260910"));

@@ -28,6 +28,8 @@ use tokio::sync::{mpsc, oneshot};
 use vynkor_sdk::proto::{envelope, Envelope, EventPublish};
 
 use reminders::DueFire;
+use rrule::DateFilter;
+use std::str::FromStr;
 use store::EventDoc;
 
 /// Runtime configuration (environment-driven; see `config.example.yaml`).
@@ -158,6 +160,7 @@ pub async fn handle_action(
                 reminder_fired: false,
                 tags: e.tags,
                 ics_uid: None,
+                rrule: e.rrule,
                 created_at_ms: now,
                 updated_at_ms: now,
             };
@@ -169,22 +172,31 @@ pub async fn handle_action(
             None => ok(json!({"found": false, "event": null}), None),
         },
         request::CalendarRequest::List { from_ms, to_ms, tag, limit, offset } => {
-            let mut events = db.list().await?;
-            if let Some(from) = from_ms {
-                events.retain(|e| e.start_ms >= from);
+            let events = db.list().await?;
+            let mut expanded = Vec::new();
+            for e in events {
+                if let Some(rrule) = &e.rrule {
+                    let window_from = from_ms.unwrap_or_else(|| store::now_ms() - 24*3600*1000);
+                    let window_to = to_ms.unwrap_or_else(|| store::now_ms() + 90*24*3600*1000);
+                    let occs = expand_rrule(&e, rrule, window_from, window_to);
+                    for occ in occs {
+                        if let Some(tag) = &tag {
+                            if !occ.tags.iter().any(|t| t == tag) { continue; }
+                        }
+                        expanded.push(occ);
+                    }
+                } else {
+                    if let Some(from) = from_ms { if e.start_ms < from { continue; } }
+                    if let Some(to) = to_ms { if e.start_ms > to { continue; } }
+                    if let Some(tag) = &tag { if !e.tags.iter().any(|t| t == tag) { continue; } }
+                    expanded.push(e);
+                }
             }
-            if let Some(to) = to_ms {
-                events.retain(|e| e.start_ms <= to);
-            }
-            if let Some(tag) = tag {
-                events.retain(|e| e.tags.iter().any(|t| t == &tag));
-            }
-            // Chronological order; deterministic tie-break on numeric id asc.
-            events.sort_by(|a, b| {
+            expanded.sort_by(|a, b| {
                 a.start_ms.cmp(&b.start_ms).then_with(|| id_num(a).cmp(&id_num(b)))
             });
-            let total = events.len();
-            let page: Vec<&EventDoc> = events.iter().skip(offset).take(limit).collect();
+            let total = expanded.len();
+            let page: Vec<&EventDoc> = expanded.iter().skip(offset).take(limit).collect();
             ok(json!({"events": page, "total": total}), None)
         }
         request::CalendarRequest::Update { id, patch } => {
@@ -222,6 +234,12 @@ pub async fn handle_action(
             }
             if let Some(t) = patch.tags {
                 doc.tags = t;
+            }
+            if let Some(r) = patch.rrule {
+                if doc.rrule != r {
+                    times_changed = true;
+                }
+                doc.rrule = r;
             }
             if let Some(end) = doc.end_ms {
                 if end < doc.start_ms {
@@ -323,6 +341,7 @@ async fn import_ics(db: &store::Db, ics_base64: &str) -> Result<ActionResult, St
                         reminder_fired: false,
                         tags: Vec::new(),
                         ics_uid: (!event.uid.is_empty()).then(|| event.uid.clone()),
+                        rrule: None,
                         created_at_ms: now,
                         updated_at_ms: now,
                     };
@@ -436,6 +455,34 @@ fn reminder_message(fire: &DueFire, now_ms: i64) -> String {
 
 fn id_num(e: &EventDoc) -> u64 {
     e.id.parse::<u64>().unwrap_or(0)
+}
+
+fn expand_rrule(master: &EventDoc, rrule: &str, window_from: i64, window_to: i64) -> Vec<EventDoc> {
+    use chrono::TimeZone;
+    use std::str::FromStr;
+    let dtstart = chrono::Utc.timestamp_millis_opt(master.start_ms).single().unwrap_or_else(|| chrono::Utc.timestamp_millis_opt(0).single().unwrap());
+    let rrule_str = format!("DTSTART:{}\nRRULE:{}", dtstart.format("%Y%m%dT%H%M%SZ"), rrule);
+    let set = match rrule::RRuleSet::from_str(&rrule_str) {
+        Ok(s) => s,
+        Err(_) => return vec![master.clone()],
+    };
+    let mut out = Vec::new();
+    let duration = master.end_ms.map(|end| end - master.start_ms);
+    let dates = match set.all(50) {
+        Ok(v) => v,
+        Err(_) => return vec![master.clone()],
+    };
+    for dt in dates {
+        let ms = dt.timestamp_millis();
+        if ms < window_from || ms > window_to { continue; }
+        let mut occ = master.clone();
+        occ.id = format!("{}#{}", master.id, ms);
+        occ.start_ms = ms;
+        occ.end_ms = duration.map(|d| ms + d);
+        out.push(occ);
+        if out.len() >= 50 { break; }
+    }
+    if out.is_empty() { vec![master.clone()] } else { out }
 }
 
 fn ok(data: Value, event: Option<ChangeEvent>) -> Result<ActionResult, String> {

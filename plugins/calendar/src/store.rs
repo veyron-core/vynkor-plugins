@@ -34,6 +34,8 @@ pub struct EventDoc {
     /// the same calendar update in place instead of duplicating events.
     #[serde(default)]
     pub ics_uid: Option<String>,
+    #[serde(default)]
+    pub rrule: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
 }
