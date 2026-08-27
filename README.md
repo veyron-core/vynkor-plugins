@@ -51,6 +51,8 @@ even when prose says vynkor.
 | `tasks` | `plugins/tasks/` | `PERMISSION_STORAGE`, `PERMISSION_EVENT_PUBLISH` | Task store (INT-19): `task_create/get/list/update/done/delete`, lists/status/tags, `plugin.tasks.changed`. See `plugins/tasks/README.md`. |
 | `metrics` | `plugins/metrics/` | `PERMISSION_STORAGE`, `PERMISSION_EVENT_PUBLISH` | Host metrics (CAP-03): periodic `/proc`/`statvfs`/`power_supply` samples into `database`, `metrics_query/latest/stats/status` + `sample` events. See `plugins/metrics/README.md`. |
 | `uptime` | `plugins/uptime/` | `PERMISSION_STORAGE`, `PERMISSION_NETWORK`, `PERMISSION_EVENT_PUBLISH` | Health monitor (INT-15): `uptime_add/remove/list/check/history/status`, periodic `http_request` checks, `check_failed` events. |
+| `library` | `plugins/library/` | `PERMISSION_STORAGE`, `PERMISSION_FILES_READ`, `PERMISSION_EVENT_PUBLISH` | Local media library index (CAP-09): `library_scan/search/get/random/recent/stats`, allowlist-root WalkDir scan (`LIBRARY_PLUGIN_ALLOWED_ROOTS`), `library:<id>` docs in `database`, `MAX_SCAN_FILES` guard. See `plugins/library/README.md`. |
+| `github` | `plugins/github/` | `PERMISSION_NETWORK`, `PERMISSION_SECRETS` | GitHub outbound (INT-06): `gh_list_issues/gh_create_issue/gh_list_prs/gh_list_runs` via `network` http_request, vault-first PAT (`secret_get` → env fallback, `GITHUB_PLUGIN_ALLOWED_PAT_ENVS` allowlist). See `plugins/github/README.md`. |
 
 Writing a new plugin? Start with [`docs/PLUGIN_AUTHORING.md`](docs/PLUGIN_AUTHORING.md) —
 the single-reader loop / RPC-proxy pattern, kernel routing facts (T-19/T-04),

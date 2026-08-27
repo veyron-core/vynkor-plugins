@@ -1,0 +1,230 @@
+{
+  "plugin_id": "library",
+  "version": "0.1.0",
+  "permissions": ["PERMISSION_STORAGE", "PERMISSION_FILES_READ"],
+  "kernel_compatibility_range": {
+    "min": "0.1.0",
+    "max": "*"
+  },
+  "binary": "library",
+  "events": ["library_indexed"],
+  "files": ["library", "plugin.json"],
+  "actions": [
+    {
+      "name": "library_scan",
+      "permission": "PERMISSION_FILES_READ",
+      "input": {
+        "type": "object",
+        "properties": {
+          "roots": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Override allowed roots for this scan (otherwise uses LIBRARY_PLUGIN_ALLOWED_ROOTS env)."
+          },
+          "force": {
+            "type": "boolean",
+            "default": false,
+            "description": "Force full re-scan even if mtime unchanged."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "scanned": { "type": "integer", "description": "Files visited." },
+          "indexed": { "type": "integer", "description": "New or updated entries." },
+          "removed": { "type": "integer", "description": "Stale entries removed." },
+          "total": { "type": "integer", "description": "Total entries after scan." }
+        },
+        "required": ["scanned", "indexed", "removed", "total"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "library_search",
+      "input": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Case-insensitive substring over path/name (empty = match all)."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["audio", "photo", "video", "all"],
+            "default": "all",
+            "description": "Filter by media kind."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 20,
+            "description": "Max results."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/entry" }
+          },
+          "total": { "type": "integer" }
+        },
+        "required": ["results", "total"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "library_get",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "found": { "type": "boolean" },
+          "entry": { "$ref": "#/$defs/entry" }
+        },
+        "required": ["found"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "library_random",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["audio", "photo", "video", "all"],
+            "default": "all"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/entry" }
+          }
+        },
+        "required": ["results"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "library_recent",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["audio", "photo", "video", "all"],
+            "default": "all"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/entry" }
+          }
+        },
+        "required": ["results"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "library_stats",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "total": { "type": "integer" },
+          "by_kind": {
+            "type": "object",
+            "additionalProperties": { "type": "integer" }
+          },
+          "last_scan_ms": { "type": ["integer", "null"] }
+        },
+        "required": ["total", "by_kind"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "path": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "type": "string", "enum": ["audio", "photo", "video", "other"] },
+        "ext": { "type": "string" },
+        "size_bytes": { "type": "integer" },
+        "mtime_ms": { "type": "integer" },
+        "indexed_at_ms": { "type": "integer" }
+      },
+      "required": ["id", "path", "name", "kind", "ext", "size_bytes", "mtime_ms", "indexed_at_ms"],
+      "additionalProperties": false
+    }
+  },
+  "config_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "LIBRARY_PLUGIN_ALLOWED_ROOTS": {
+        "type": "string",
+        "description": "Comma-separated absolute roots to scan. Unset/empty = scan disabled (no files indexed)."
+      },
+      "LIBRARY_PLUGIN_MAX_SCAN_FILES": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 10000,
+        "description": "Hard cap on files visited per scan."
+      },
+      "LIBRARY_PLUGIN_DB_TIMEOUT_MS": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 5000
+      }
+    },
+    "additionalProperties": true
+  }
+}

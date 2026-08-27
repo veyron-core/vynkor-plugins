@@ -1,0 +1,122 @@
+{
+  "plugin_id": "github",
+  "version": "0.1.0",
+  "permissions": ["PERMISSION_NETWORK", "PERMISSION_SECRETS"],
+  "kernel_compatibility_range": {
+    "min": "0.1.0",
+    "max": "*"
+  },
+  "binary": "github",
+  "events": [],
+  "files": ["github", "plugin.json"],
+  "actions": [
+    {
+      "name": "gh_list_issues",
+      "permission": "PERMISSION_NETWORK",
+      "input": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string", "description": "owner/repo (e.g. vynkor-core/vynkor-plugins)" },
+          "state": { "type": "string", "enum": ["open", "closed", "all"], "default": "open" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 },
+          "pat_env": { "type": "string", "description": "Env var name holding GitHub PAT (vault-first). Must be allowlisted." }
+        },
+        "required": ["repo"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "issues": { "type": "array", "items": { "type": "object" } }
+        },
+        "required": ["issues"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "gh_create_issue",
+      "permission": "PERMISSION_NETWORK",
+      "input": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "body": { "type": "string", "maxLength": 10000 },
+          "pat_env": { "type": "string" }
+        },
+        "required": ["repo", "title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "issue": { "type": "object" }
+        },
+        "required": ["issue"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "gh_list_prs",
+      "permission": "PERMISSION_NETWORK",
+      "input": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "state": { "type": "string", "enum": ["open", "closed", "all"], "default": "open" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 },
+          "pat_env": { "type": "string" }
+        },
+        "required": ["repo"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "prs": { "type": "array", "items": { "type": "object" } }
+        },
+        "required": ["prs"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "gh_list_runs",
+      "permission": "PERMISSION_NETWORK",
+      "input": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "branch": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+          "pat_env": { "type": "string" }
+        },
+        "required": ["repo"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "runs": { "type": "array", "items": { "type": "object" } }
+        },
+        "required": ["runs"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "config_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "GITHUB_PLUGIN_ALLOWED_PAT_ENVS": {
+        "type": "string",
+        "description": "Comma-separated allowlist of env var names that may hold a GitHub PAT."
+      },
+      "GITHUB_PLUGIN_PAT_ENV": {
+        "type": "string",
+        "default": "GITHUB_TOKEN",
+        "description": "Default PAT env var name when caller omits pat_env."
+      }
+    },
+    "additionalProperties": true
+  }
+}
