@@ -1,14 +1,19 @@
 {
   "plugin_id": "weather",
   "version": "0.1.0",
-  "permissions": ["PERMISSION_NETWORK"],
+  "permissions": [
+    "PERMISSION_NETWORK"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "weather",
   "events": [],
-  "files": ["weather", "plugin.json"],
+  "files": [
+    "weather",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "weather_now",
@@ -16,24 +21,54 @@
       "input": {
         "type": "object",
         "properties": {
-          "lat": { "type": "number", "description": "Latitude (-90..90)." },
-          "lon": { "type": "number", "description": "Longitude (-180..180)." },
-          "timezone": { "type": "string", "description": "IANA timezone e.g. Europe/Berlin or auto. Default auto." }
+          "lat": {
+            "type": "number",
+            "description": "Latitude (-90..90)."
+          },
+          "lon": {
+            "type": "number",
+            "description": "Longitude (-180..180)."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone e.g. Europe/Berlin or auto. Default auto."
+          }
         },
-        "required": ["lat", "lon"],
+        "required": [
+          "lat",
+          "lon"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "latitude": { "type": "number" },
-          "longitude": { "type": "number" },
-          "timezone": { "type": "string" },
-          "current": { "type": "object", "description": "Current weather block from open-meteo." },
-          "hourly_units": { "type": "object" },
-          "raw": { "type": "object", "description": "Full provider payload for debugging." }
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "current": {
+            "type": "object",
+            "description": "Current weather block from open-meteo."
+          },
+          "hourly_units": {
+            "type": "object"
+          },
+          "raw": {
+            "type": "object",
+            "description": "Full provider payload for debugging."
+          }
         },
-        "required": ["latitude", "longitude", "current"],
+        "required": [
+          "latitude",
+          "longitude",
+          "current"
+        ],
         "additionalProperties": true
       }
     },
@@ -43,25 +78,97 @@
       "input": {
         "type": "object",
         "properties": {
-          "lat": { "type": "number", "description": "Latitude (-90..90)." },
-          "lon": { "type": "number", "description": "Longitude (-180..180)." },
-          "days": { "type": "integer", "minimum": 1, "maximum": 16, "default": 3, "description": "Forecast days (1..16)." },
-          "timezone": { "type": "string", "description": "IANA timezone e.g. Europe/Berlin or auto. Default auto." }
+          "lat": {
+            "type": "number",
+            "description": "Latitude (-90..90)."
+          },
+          "lon": {
+            "type": "number",
+            "description": "Longitude (-180..180)."
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16,
+            "default": 3,
+            "description": "Forecast days (1..16)."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone e.g. Europe/Berlin or auto. Default auto."
+          }
         },
-        "required": ["lat", "lon"],
+        "required": [
+          "lat",
+          "lon"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "latitude": { "type": "number" },
-          "longitude": { "type": "number" },
-          "timezone": { "type": "string" },
-          "daily": { "type": "object", "description": "Daily forecast block." },
-          "daily_units": { "type": "object" },
-          "raw": { "type": "object" }
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "daily": {
+            "type": "object",
+            "description": "Daily forecast block."
+          },
+          "daily_units": {
+            "type": "object"
+          },
+          "raw": {
+            "type": "object"
+          }
         },
-        "required": ["latitude", "longitude", "daily"],
+        "required": [
+          "latitude",
+          "longitude",
+          "daily"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "status",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "uptime_ms": {
+            "type": "integer"
+          },
+          "engine_ready": {
+            "type": "boolean"
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "counters": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "version",
+          "uptime_ms",
+          "engine_ready"
+        ],
         "additionalProperties": true
       }
     }
@@ -70,10 +177,25 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
-      "WEATHER_PLUGIN_DEFAULT_LAT": { "type": "number", "description": "Default latitude when caller omits coords (e.g. home location)." },
-      "WEATHER_PLUGIN_DEFAULT_LON": { "type": "number", "description": "Default longitude." },
-      "WEATHER_PLUGIN_DEFAULT_TIMEZONE": { "type": "string", "default": "auto", "description": "Default timezone for queries." },
-      "WEATHER_PLUGIN_TIMEOUT_MS": { "type": "integer", "minimum": 1, "default": 10000, "description": "HTTP timeout for open-meteo calls." }
+      "WEATHER_PLUGIN_DEFAULT_LAT": {
+        "type": "number",
+        "description": "Default latitude when caller omits coords (e.g. home location)."
+      },
+      "WEATHER_PLUGIN_DEFAULT_LON": {
+        "type": "number",
+        "description": "Default longitude."
+      },
+      "WEATHER_PLUGIN_DEFAULT_TIMEZONE": {
+        "type": "string",
+        "default": "auto",
+        "description": "Default timezone for queries."
+      },
+      "WEATHER_PLUGIN_TIMEOUT_MS": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 10000,
+        "description": "HTTP timeout for open-meteo calls."
+      }
     },
     "additionalProperties": true
   }

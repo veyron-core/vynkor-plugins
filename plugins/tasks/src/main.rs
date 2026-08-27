@@ -25,8 +25,8 @@ use vynkor_sdk::{VynkorClient, VynkorError};
 
 const PLUGIN_ID: &str = "tasks";
 const PLUGIN_VERSION: &str = "0.1.0";
-const ACTIONS: [&str; 6] =
-    ["task_create", "task_get", "task_list", "task_update", "task_done", "task_delete"];
+const ACTIONS: [&str; 7] =
+    ["task_create", "task_get", "task_list", "task_update", "task_done", "task_delete", "status"];
 
 fn manifest() -> PluginManifest {
     PluginManifest {
@@ -37,6 +37,19 @@ fn manifest() -> PluginManifest {
         actions: ACTIONS.iter().map(|s| s.to_string()).collect(),
         ..Default::default()
     }
+}
+
+static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+fn start_instant() -> std::time::Instant { *START.get_or_init(std::time::Instant::now) }
+fn status_payload() -> Vec<u8> {
+    let uptime_ms = start_instant().elapsed().as_millis() as u64;
+    serde_json::to_vec(&serde_json::json!({
+        "version": PLUGIN_VERSION,
+        "uptime_ms": uptime_ms,
+        "engine_ready": true,
+        "last_error": null,
+        "counters": {}
+    })).unwrap()
 }
 
 fn unix_millis() -> u64 {
@@ -128,6 +141,10 @@ async fn serve(mut client: VynkorClient, config: Config) -> Result<(), VynkorErr
                         let out = outbound_tx.clone();
                         let config = Arc::clone(&config);
                         tokio::spawn(async move {
+                            if req.action == "status" {
+                                let _ = out.send(action_response(req.action_id, ActionStatus::ActionOk, status_payload(), String::new())).await;
+                                return;
+                            }
                             match handle_action(rpc, &config, &req.action, &req.params_json)
                                 .await
                             {

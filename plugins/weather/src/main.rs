@@ -11,9 +11,22 @@ const PLUGIN_VERSION: &str = "0.1.0";
 fn manifest() -> PluginManifest {
     PluginManifest {
         permissions: vec!["PERMISSION_NETWORK".into()],
-        actions: vec!["weather_now".into(), "weather_forecast".into()],
+        actions: vec!["weather_now".into(), "weather_forecast".into(), "status".into()],
         ..Default::default()
     }
+}
+
+static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+fn start_instant() -> std::time::Instant { *START.get_or_init(std::time::Instant::now) }
+fn status_payload() -> Vec<u8> {
+    let uptime_ms = start_instant().elapsed().as_millis() as u64;
+    serde_json::to_vec(&serde_json::json!({
+        "version": PLUGIN_VERSION,
+        "uptime_ms": uptime_ms,
+        "engine_ready": true,
+        "last_error": null,
+        "counters": {}
+    })).unwrap()
 }
 
 fn unix_millis() -> u64 {
@@ -55,6 +68,12 @@ async fn handle_action_request(
                 data_json: Vec::new(),
                 error: e,
             },
+        },
+        "status" => ActionResponse {
+            action_id: req.action_id,
+            status: ActionStatus::ActionOk as i32,
+            data_json: status_payload(),
+            error: String::new(),
         },
         other => ActionResponse {
             action_id: req.action_id,
