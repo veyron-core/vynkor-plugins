@@ -1,0 +1,106 @@
+{
+  "plugin_id": "metrics",
+  "version": "0.1.0",
+  "permissions": ["PERMISSION_STORAGE", "PERMISSION_EVENT_PUBLISH"],
+  "kernel_compatibility_range": { "min": "0.1.0", "max": "*" },
+  "binary": "metrics",
+  "events": [],
+  "files": ["metrics", "plugin.json"],
+  "actions": [
+    {
+      "name": "metrics_query",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from_ms": { "type": "integer", "description": "Inclusive lower bound (unix ms). Optional." },
+          "to_ms": { "type": "integer", "description": "Inclusive upper bound (unix ms). Optional." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+          "offset": { "type": "integer", "minimum": 0, "default": 0 }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "samples": { "type": "array", "items": { "$ref": "#/$defs/sample" } },
+          "total": { "type": "integer" }
+        },
+        "required": ["samples", "total"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "metrics_latest",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "found": { "type": "boolean" },
+          "sample": { "$ref": "#/$defs/sample" }
+        },
+        "required": ["found"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "metrics_stats",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "count": { "type": "integer" },
+          "oldest_ms": { "type": ["integer", "null"] },
+          "newest_ms": { "type": ["integer", "null"] }
+        },
+        "required": ["count", "oldest_ms", "newest_ms"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "status",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "version": { "type": "string" },
+          "uptime_ms": { "type": "integer" },
+          "engine_ready": { "type": "boolean" },
+          "last_error": { "type": ["string", "null"] },
+          "counters": { "type": "object" }
+        },
+        "required": ["version", "uptime_ms", "engine_ready"],
+        "additionalProperties": true
+      }
+    }
+  ],
+  "$defs": {
+    "sample": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp_ms": { "type": "integer" },
+        "cpu_load_1": { "type": ["number", "null"] },
+        "mem_total_kb": { "type": ["integer", "null"] },
+        "mem_available_kb": { "type": ["integer", "null"] },
+        "mem_used_percent": { "type": ["number", "null"] },
+        "disk_total_bytes": { "type": ["integer", "null"] },
+        "disk_available_bytes": { "type": ["integer", "null"] },
+        "disk_used_percent": { "type": ["number", "null"] },
+        "battery_percent": { "type": ["integer", "null"] },
+        "battery_charging": { "type": ["boolean", "null"] }
+      },
+      "required": ["id", "timestamp_ms"],
+      "additionalProperties": false
+    }
+  },
+  "config_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "METRICS_PLUGIN_INTERVAL_SECS": { "type": "integer", "minimum": 1, "default": 30 },
+      "METRICS_PLUGIN_MAX_SAMPLES": { "type": "integer", "minimum": 1, "default": 10000 },
+      "METRICS_PLUGIN_DB_TIMEOUT_MS": { "type": "integer", "minimum": 1, "default": 5000 }
+    },
+    "additionalProperties": true
+  }
+}
