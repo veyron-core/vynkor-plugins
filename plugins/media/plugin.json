@@ -447,6 +447,56 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "media_raise",
+      "input": {
+        "type": "object",
+        "properties": {
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for default player."
+          }
+        },
+        "additionalProperties": true
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "media_quit",
+      "input": {
+        "type": "object",
+        "properties": {
+          "player": {
+            "type": "string",
+            "description": "MPRIS player name; omit for default player."
+          }
+        },
+        "additionalProperties": true
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": false
+      }
     }
   ],
   "config_schema": {
