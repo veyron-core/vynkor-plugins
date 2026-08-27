@@ -1,0 +1,7 @@
+# weather plugin config — operator defaults (env: in kernel config.yaml)
+# No API key needed (open-meteo public). Home coords used when caller omits?
+# Currently every call requires lat/lon, but defaults help for playbooks/briefings.
+# WEATHER_PLUGIN_DEFAULT_LAT: 55.75
+# WEATHER_PLUGIN_DEFAULT_LON: 37.61
+# WEATHER_PLUGIN_DEFAULT_TIMEZONE: auto
+# WEATHER_PLUGIN_TIMEOUT_MS: 10000
