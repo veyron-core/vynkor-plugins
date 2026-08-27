@@ -84,6 +84,10 @@ pub struct GoalDoc {
     pub max_steps: u32,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
+    #[serde(default)]
+    pub tool_counts: std::collections::BTreeMap<String, u32>,
+    #[serde(default)]
+    pub tool_last_ms: std::collections::BTreeMap<String, i64>,
 }
 
 impl GoalDoc {
@@ -232,6 +236,8 @@ mod tests {
             max_steps: 6,
             created_at_ms: 0,
             updated_at_ms: 0,
+            tool_counts: Default::default(),
+            tool_last_ms: Default::default(),
         }
     }
 }

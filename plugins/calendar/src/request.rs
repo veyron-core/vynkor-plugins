@@ -4,6 +4,7 @@
 //! every action's params parse into a [`CalendarRequest`] variant or are
 //! rejected with a human-readable error naming the expected shape.
 
+use chrono::TimeZone;
 use serde::Deserialize;
 
 pub const MAX_TITLE_BYTES: usize = 512;
@@ -25,6 +26,7 @@ pub struct NewEvent {
     pub all_day: bool,
     pub remind_before_ms: Option<i64>,
     pub tags: Vec<String>,
+    pub rrule: Option<String>,
 }
 
 #[derive(Debug)]
@@ -36,6 +38,7 @@ pub struct EventPatch {
     pub all_day: Option<bool>,
     pub remind_before_ms: Option<i64>,
     pub tags: Option<Vec<String>>,
+    pub rrule: Option<Option<String>>,
 }
 
 #[derive(Debug)]
@@ -71,6 +74,8 @@ struct CreateParams {
     remind_before_ms: Option<i64>,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(default)]
+    rrule: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -109,6 +114,8 @@ struct UpdateParams {
     remind_before_ms: Option<i64>,
     #[serde(default)]
     tags: Option<Vec<String>>,
+    #[serde(default)]
+    rrule: Option<Option<String>>,
 }
 
 /// ~6 MiB of decoded ICS; generous for a personal calendar, tight enough to
@@ -191,6 +198,26 @@ pub fn sanitize_tags(raw: &[String]) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
+
+fn validate_rrule(rrule: &str) -> Result<String, String> {
+    let s = rrule.trim();
+    if s.is_empty() { return Err("params.rrule must not be empty when present".into()); }
+    if s.len() > 256 { return Err("params.rrule exceeds 256 bytes".into()); }
+    if !s.contains("FREQ=") { return Err("params.rrule must contain FREQ= (e.g. FREQ=WEEKLY;BYDAY=MO)".into()); }
+    // Try to parse with rrule crate for early validation using start time 0
+    // Use rrule::RRuleSet::from_str style - try parsing
+    // For validation we attempt to build an RRule from the string with a dummy DTSTART
+    use std::str::FromStr;
+    let dtstart = chrono::Utc.timestamp_millis_opt(0).single().unwrap();
+    let rrule_str = format!("DTSTART:19700101T000000Z\nRRULE:{}", s);
+    if let Err(e) = rrule::RRuleSet::from_str(&rrule_str) {
+        return Err(format!("params.rrule invalid: {e}"));
+    }
+    let _ = dtstart;
+    Ok(s.to_string())
+}
+
+
 pub fn parse_request(action: &str, params_json: &[u8]) -> Result<CalendarRequest, String> {
     match action {
         "event_create" => {
@@ -207,6 +234,10 @@ pub fn parse_request(action: &str, params_json: &[u8]) -> Result<CalendarRequest
             check_size("title", &p.title, MAX_TITLE_BYTES)?;
             check_size("description", &p.description, MAX_DESCRIPTION_BYTES)?;
             validate_times(p.start_ms, p.end_ms, p.remind_before_ms)?;
+            let rrule = match p.rrule {
+                Some(s) => Some(validate_rrule(&s)?),
+                None => None,
+            };
             Ok(CalendarRequest::Create(NewEvent {
                 title: p.title,
                 description: p.description,
@@ -215,6 +246,7 @@ pub fn parse_request(action: &str, params_json: &[u8]) -> Result<CalendarRequest
                 all_day: p.all_day,
                 remind_before_ms: p.remind_before_ms,
                 tags: sanitize_tags(&p.tags)?,
+                rrule,
             }))
         }
         "event_get" => {
@@ -262,6 +294,17 @@ pub fn parse_request(action: &str, params_json: &[u8]) -> Result<CalendarRequest
                 )
             })?;
             let id = require_nonempty_id(p.id)?;
+            let rrule_patch = match p.rrule {
+                Some(None) => Some(None),
+                Some(Some(s)) => {
+                    if s.trim().is_empty() {
+                        Some(None)
+                    } else {
+                        Some(Some(validate_rrule(&s)?))
+                    }
+                }
+                None => None,
+            };
             let patch = EventPatch {
                 title: p.title,
                 description: p.description,
@@ -270,6 +313,7 @@ pub fn parse_request(action: &str, params_json: &[u8]) -> Result<CalendarRequest
                 all_day: p.all_day,
                 remind_before_ms: p.remind_before_ms,
                 tags: p.tags,
+                rrule: rrule_patch,
             };
             if patch.title.is_none()
                 && patch.description.is_none()
@@ -278,10 +322,11 @@ pub fn parse_request(action: &str, params_json: &[u8]) -> Result<CalendarRequest
                 && patch.all_day.is_none()
                 && patch.remind_before_ms.is_none()
                 && patch.tags.is_none()
+                && patch.rrule.is_none()
             {
                 return Err(
                     "event_update requires at least one of title, description, start_ms, \
-                     end_ms, all_day, remind_before_ms, tags"
+                     end_ms, all_day, remind_before_ms, tags, rrule"
                         .to_string(),
                 );
             }

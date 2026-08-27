@@ -39,6 +39,8 @@ fn spec_from_action_spec(s: &Value) -> Option<ToolSpec> {
             .unwrap_or(false),
         risk: s.get("risk").and_then(Value::as_str).unwrap_or_default().to_string(),
         timeout_ms: TOOL_TIMEOUT_DEFAULT_MS,
+        cooldown_ms: 0,
+        max_per_goal: 16,
         source: Source::Kernel,
     })
 }

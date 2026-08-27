@@ -142,7 +142,36 @@ covering both providers' key names; a decoy env value to prove vault-wins;
 an unlisted name for the rejection case). No locks, no cleanup, no races —
 and the vault-vs-env precedence gets tested for free.
 
-## 7. Running against a live secured kernel
+## 7. Status convention (INF-07)
+
+Every plugin should expose a `status` action (no input, always ungated) for
+`vyn status` / web health dashboards:
+
+```json
+// request: {"action": "status", "params_json": "{}"}
+// response data_json:
+{
+  "version": "0.1.0",
+  "uptime_ms": 12345,
+  "engine_ready": true,
+  "last_error": null,
+  "counters": {"handled": 42}
+}
+```
+
+- `version` — plugin's own `PLUGIN_VERSION`.
+- `uptime_ms` — `now - start_monotonic`.
+- `engine_ready` — false while lazy-loaded model/DB not yet ready.
+- `last_error` — last transient error string or null.
+- `counters` — free-form metrics (requests, cache hits, etc.).
+
+Implementations keep `start_instant = Instant::now()` at `main` startup and
+return `elapsed`. Plugins with lazy engines (speech, vector-db) set
+`engine_ready` from an `AtomicBool` flipped after `OnceLock` init. The helper
+`vynkor_sdk::status::status_response(version, start, ready, last_error, counters)` builds the JSON; no kernel change needed — `status` is just another
+registered action, polled via ordinary `send_action` to each plugin.
+
+## 8. Running against a live secured kernel
 
 Lessons from the first full audit (`LIVE_KERNEL_AUDIT_2026-08-22.md`,
 harness snapshot in `scripts/live-audit/`). The fake kernel (§3) proves

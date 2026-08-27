@@ -1,0 +1,393 @@
+{
+  "plugin_id": "tasks",
+  "version": "0.1.0",
+  "permissions": [
+    "PERMISSION_STORAGE",
+    "PERMISSION_EVENT_PUBLISH"
+  ],
+  "kernel_compatibility_range": {
+    "min": "0.1.0",
+    "max": "*"
+  },
+  "binary": "tasks",
+  "events": [],
+  "files": [
+    "tasks",
+    "plugin.json"
+  ],
+  "actions": [
+    {
+      "name": "task_create",
+      "input": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "list": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "due_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "required": [
+          "id",
+          "task"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "task_get",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "found": {
+            "type": "boolean"
+          },
+          "task": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "required": [
+          "found"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "task_list",
+      "input": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "list": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "done",
+              "all"
+            ]
+          },
+          "tag": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/task"
+            }
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tasks",
+          "total"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "task_update",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "list": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "due_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32
+          },
+          "done": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "boolean"
+          },
+          "task": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "required": [
+          "updated",
+          "task"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "task_done",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "done": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "task": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "required": [
+          "done",
+          "task"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "task_delete",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "status",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "uptime_ms": {
+            "type": "integer"
+          },
+          "engine_ready": {
+            "type": "boolean"
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "counters": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "version",
+          "uptime_ms",
+          "engine_ready"
+        ],
+        "additionalProperties": true
+      }
+    }
+  ],
+  "$defs": {
+    "task": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "list": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "done": {
+          "type": "boolean"
+        },
+        "due_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "created_at_ms": {
+          "type": "integer"
+        },
+        "updated_at_ms": {
+          "type": "integer"
+        },
+        "done_at_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "notes",
+        "list",
+        "tags",
+        "done",
+        "due_ms",
+        "created_at_ms",
+        "updated_at_ms",
+        "done_at_ms"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "config_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "TASKS_PLUGIN_DB_TIMEOUT_MS": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 5000
+      }
+    },
+    "additionalProperties": true
+  }
+}

@@ -31,6 +31,7 @@ use std::collections::BTreeMap;
 
 pub const ALLOWED_ACTIONS_ENV: &str = "AGENT_PLUGIN_ALLOWED_ACTIONS";
 pub const TOOLS_FILE_ENV: &str = "AGENT_PLUGIN_TOOLS_FILE";
+pub const APPROVALS_FILE_ENV: &str = "AGENT_PLUGIN_APPROVALS_FILE";
 /// `off` disables kernel manifest discovery (static catalog only).
 pub const DISCOVERY_ENV: &str = "AGENT_PLUGIN_DISCOVERY";
 
@@ -66,6 +67,10 @@ pub struct ToolSpec {
     #[serde(default)]
     pub risk: String,
     pub timeout_ms: u32,
+    #[serde(default)]
+    pub cooldown_ms: u64,
+    #[serde(default)]
+    pub max_per_goal: u32,
     pub source: Source,
 }
 
@@ -138,6 +143,18 @@ fn parse_spec(v: &serde_json::Value, index: usize) -> Result<ToolSpec, String> {
             (raw as u32).clamp(TOOL_TIMEOUT_MIN_MS, TOOL_TIMEOUT_MAX_MS)
         }
     };
+    let cooldown_ms = match obj.get("cooldown_ms") {
+        None | Some(serde_json::Value::Null) => 0,
+        Some(n) => n.as_u64().ok_or_else(|| format!("tools file entry \"{name}\": \"cooldown_ms\" must be a non-negative integer"))?,
+    };
+    let max_per_goal = match obj.get("max_per_goal") {
+        None | Some(serde_json::Value::Null) => 16,
+        Some(n) => {
+            let raw = n.as_u64().ok_or_else(|| format!("tools file entry \"{name}\": \"max_per_goal\" must be a non-negative integer"))?;
+            if raw > 1000 { return Err(format!("tools file entry \"{name}\": \"max_per_goal\" must be <= 1000")); }
+            raw as u32
+        }
+    };
     Ok(ToolSpec {
         name: name.to_string(),
         description,
@@ -145,8 +162,22 @@ fn parse_spec(v: &serde_json::Value, index: usize) -> Result<ToolSpec, String> {
         requires_confirmation,
         risk,
         timeout_ms,
+        cooldown_ms,
+        max_per_goal,
         source: Source::File,
     })
+}
+
+
+fn parse_approvals_file(raw: &str) -> Result<std::collections::BTreeMap<String, bool>, String> {
+    let v: serde_json::Value = serde_json::from_str(raw).map_err(|e| format!("approvals file is not valid JSON: {e}"))?;
+    let obj = v.as_object().ok_or_else(|| "approvals file must be an object {\"tool\": bool}" .to_string())?;
+    let mut map = std::collections::BTreeMap::new();
+    for (k, val) in obj {
+        let b = val.as_bool().ok_or_else(|| format!("approvals entry \"{k}\" must be boolean (true=requires confirmation)"))?;
+        map.insert(k.clone(), b);
+    }
+    Ok(map)
 }
 
 fn parse_tools_file(raw: &str) -> Result<BTreeMap<String, ToolSpec>, String> {
@@ -195,19 +226,34 @@ impl Catalog {
             None => BTreeMap::new(),
         };
 
+        let approvals = match std::env::var(APPROVALS_FILE_ENV).ok().filter(|s| !s.is_empty()) {
+            Some(path) => {
+                let raw = std::fs::read_to_string(&path).map_err(|e| format!("cannot read approvals file \"{path}\": {e}"))?;
+                parse_approvals_file(&raw)?
+            }
+            None => std::collections::BTreeMap::new(),
+        };
         let tools = allowed
             .iter()
-            .map(|name| match specs.get(name) {
-                Some(spec) => spec.clone(),
-                None => ToolSpec {
-                    name: name.clone(),
-                    description: String::new(),
-                    parameters: serde_json::Value::Null,
-                    requires_confirmation: false,
-                    risk: String::new(),
-                    timeout_ms: TOOL_TIMEOUT_DEFAULT_MS,
-                    source: Source::Minimal,
-                },
+            .map(|name| {
+                let mut spec = match specs.get(name) {
+                    Some(s) => s.clone(),
+                    None => ToolSpec {
+                        name: name.clone(),
+                        description: String::new(),
+                        parameters: serde_json::Value::Null,
+                        requires_confirmation: false,
+                        risk: String::new(),
+                        timeout_ms: TOOL_TIMEOUT_DEFAULT_MS,
+                        cooldown_ms: 0,
+                        max_per_goal: 16,
+                        source: Source::Minimal,
+                    },
+                };
+                if let Some(&confirm) = approvals.get(name) {
+                    spec.requires_confirmation = confirm;
+                }
+                spec
             })
             .collect();
 
@@ -258,6 +304,8 @@ mod tests {
             requires_confirmation: false,
             risk: String::new(),
             timeout_ms: 30_000,
+            cooldown_ms: 0,
+            max_per_goal: 16,
             source: Source::Minimal,
         }
     }

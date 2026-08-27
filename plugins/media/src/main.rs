@@ -44,6 +44,8 @@ impl Plugin for MediaPlugin {
                 "media_list_players".to_string(),
                 "media_shuffle".to_string(),
                 "media_loop".to_string(),
+                "media_raise".to_string(),
+                "media_quit".to_string(),
             ],
             ..Default::default()
         }

@@ -263,6 +263,8 @@ async fn start_goal(db: &Db, rpc: &Rpc, params: GoalStartParams) -> Result<Actio
         },
         created_at_ms: now,
         updated_at_ms: now,
+        tool_counts: Default::default(),
+        tool_last_ms: Default::default(),
     };
 
     engine::run(db, rpc, &catalog, &mut doc, engine::Entry::Fresh).await?;

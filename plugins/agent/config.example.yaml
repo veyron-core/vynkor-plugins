@@ -11,8 +11,12 @@ AGENT_PLUGIN_ALLOWED_ACTIONS=notify_send,fs_list,fs_read,media_status,launch
 # permission needed). An optional curated file overrides per name:
 # {"tools": [{"name": "notify_send", "description": "...",
 #             "parameters": {"type":"object"},
-#             "requires_confirmation": false, "timeout_ms": 30000}]}
+#             "requires_confirmation": false, "timeout_ms": 30000,
+#             "cooldown_ms": 0, "max_per_goal": 16}]}
 AGENT_PLUGIN_TOOLS_FILE=~/.config/vyn/agent-tools.json
+# Persistent per-tool approval overrides (AGT-07): {"notify_send": false, "fs_delete": true}
+# wins over both kernel and tools file.
+AGENT_PLUGIN_APPROVALS_FILE=~/.config/vyn/agent-approvals.json
 # Disable manifest discovery (static catalog only):
 # AGENT_PLUGIN_DISCOVERY=off
 

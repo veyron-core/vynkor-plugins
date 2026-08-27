@@ -14,6 +14,8 @@ path = "src/main.rs"
 
 [dependencies]
 vynkor-sdk = "0.0.3"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "process"] }
+vynkor-wire = "0.0.2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "sync", "time", "net"] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 async-trait = "0.1"

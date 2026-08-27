@@ -1,0 +1,132 @@
+{
+  "plugin_id": "uptime",
+  "version": "0.1.0",
+  "permissions": ["PERMISSION_STORAGE", "PERMISSION_NETWORK", "PERMISSION_EVENT_PUBLISH"],
+  "kernel_compatibility_range": { "min": "0.1.0", "max": "*" },
+  "binary": "uptime",
+  "events": [],
+  "files": ["uptime", "plugin.json"],
+  "actions": [
+    {
+      "name": "uptime_add",
+      "permission": "PERMISSION_STORAGE",
+      "input": {
+        "type": "object",
+        "properties": { "url": { "type": "string", "description": "https:// URL to monitor." } },
+        "required": ["url"],
+        "additionalProperties": false
+      },
+      "output": { "type": "object", "properties": { "id": { "type": "string" }, "target": { "$ref": "#/$defs/target" } }, "required": ["id", "target"], "additionalProperties": false }
+    },
+    {
+      "name": "uptime_remove",
+      "permission": "PERMISSION_STORAGE",
+      "input": { "type": "object", "properties": { "id": { "type": "string", "minLength": 1 } }, "required": ["id"], "additionalProperties": false },
+      "output": { "type": "object", "properties": { "removed": { "type": "boolean" } }, "required": ["removed"], "additionalProperties": false }
+    },
+    {
+      "name": "uptime_list",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": { "type": "object", "properties": { "targets": { "type": "array", "items": { "$ref": "#/$defs/target" } } }, "required": ["targets"], "additionalProperties": false }
+    },
+    {
+      "name": "uptime_check",
+      "permission": "PERMISSION_NETWORK",
+      "input": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "timeout_ms": { "type": "integer", "minimum": 1, "default": 5000 }
+        },
+        "required": ["url"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "ok": { "type": "boolean" },
+          "status": { "type": "integer" },
+          "latency_ms": { "type": "integer" },
+          "error": { "type": ["string", "null"] }
+        },
+        "required": ["url", "ok", "status", "latency_ms"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "uptime_history",
+      "input": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+          "offset": { "type": "integer", "minimum": 0, "default": 0 }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } },
+          "total": { "type": "integer" }
+        },
+        "required": ["checks", "total"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "status",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "version": { "type": "string" },
+          "uptime_ms": { "type": "integer" },
+          "engine_ready": { "type": "boolean" },
+          "last_error": { "type": ["string", "null"] },
+          "counters": { "type": "object" }
+        },
+        "required": ["version", "uptime_ms", "engine_ready"],
+        "additionalProperties": true
+      }
+    }
+  ],
+  "$defs": {
+    "target": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "url": { "type": "string" },
+        "created_at_ms": { "type": "integer" }
+      },
+      "required": ["id", "url", "created_at_ms"],
+      "additionalProperties": false
+    },
+    "check": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "url": { "type": "string" },
+        "timestamp_ms": { "type": "integer" },
+        "ok": { "type": "boolean" },
+        "status": { "type": "integer" },
+        "latency_ms": { "type": "integer" },
+        "error": { "type": ["string", "null"] }
+      },
+      "required": ["id", "url", "timestamp_ms", "ok", "status", "latency_ms"],
+      "additionalProperties": false
+    }
+  },
+  "config_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "UPTIME_PLUGIN_INTERVAL_SECS": { "type": "integer", "minimum": 5, "default": 60 },
+      "UPTIME_PLUGIN_MAX_CHECKS": { "type": "integer", "minimum": 1, "default": 5000 },
+      "UPTIME_PLUGIN_DB_TIMEOUT_MS": { "type": "integer", "minimum": 1, "default": 5000 },
+      "UPTIME_PLUGIN_CHECK_TIMEOUT_MS": { "type": "integer", "minimum": 1, "default": 5000 }
+    },
+    "additionalProperties": true
+  }
+}

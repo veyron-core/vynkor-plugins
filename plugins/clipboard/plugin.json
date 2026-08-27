@@ -1,7 +1,7 @@
 {
   "plugin_id": "clipboard",
   "version": "0.1.0",
-  "permissions": ["clipboard"],
+  "permissions": ["clipboard", "PERMISSION_STORAGE"],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
@@ -69,8 +69,60 @@
         "required": ["session", "readers", "writers"],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "clipboard_history",
+      "permission": "clipboard",
+      "input": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Case-insensitive substring filter over text. Optional." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+          "offset": { "type": "integer", "minimum": 0, "default": 0 }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "entries": { "type": "array", "items": { "$ref": "#/$defs/clip_entry" } },
+          "total": { "type": "integer" }
+        },
+        "required": ["entries", "total"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "clipboard_clear",
+      "permission": "clipboard",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cleared": { "type": "integer" }
+        },
+        "required": ["cleared"],
+        "additionalProperties": false
+      }
     }
   ],
+  "$defs": {
+    "clip_entry": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "created_at_ms": { "type": "integer" },
+        "provider": { "type": "string" }
+      },
+      "required": ["id", "text", "created_at_ms", "provider"],
+      "additionalProperties": false
+    }
+  },
   "config_schema": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
@@ -89,6 +141,22 @@
         "type": "integer",
         "minimum": 1,
         "description": "Hard cap on clipboard payload size in bytes (default 1048576)."
+      },
+      "CLIPBOARD_PLUGIN_HISTORY": {
+        "type": "string",
+        "description": "Set to 0/false/off/no to disable history capture. Default enabled."
+      },
+      "CLIPBOARD_PLUGIN_HISTORY_LIMIT": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 1000,
+        "description": "Max history entries kept (ring, oldest evicted)."
+      },
+      "CLIPBOARD_PLUGIN_DB_TIMEOUT_MS": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 5000,
+        "description": "Timeout for each database call (history)."
       }
     },
     "additionalProperties": true

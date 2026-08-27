@@ -56,6 +56,7 @@ mod tests {
             reminder_fired: fired,
             tags: vec![],
             ics_uid: None,
+            rrule: None,
             created_at_ms: 0,
             updated_at_ms: 0,
         }

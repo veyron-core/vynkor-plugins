@@ -564,7 +564,9 @@ mod tests {
             requires_confirmation: false,
             risk: String::new(),
             timeout_ms: 30_000,
-            source: crate::tools::Source::Kernel,
+            cooldown_ms: 0,
+            max_per_goal: 16,
+            source: crate::tools::Source::Minimal,
         };
         let no_launch = Catalog {
             tools: vec![tool("notify_send")],
@@ -595,6 +597,8 @@ mod tests {
                 requires_confirmation: false,
                 risk: String::new(),
                 timeout_ms: 30_000,
+                cooldown_ms: 0,
+                max_per_goal: 16,
                 source: crate::tools::Source::Kernel,
             }],
             allowed_actions: vec!["notify_send".into()],
@@ -681,6 +685,8 @@ mod tests {
             requires_confirmation: false,
             risk: String::new(),
             timeout_ms: 30_000,
+            cooldown_ms: 0,
+            max_per_goal: 16,
             source: crate::tools::Source::Kernel,
         };
         let mut minimal = spec.clone();

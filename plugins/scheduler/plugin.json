@@ -65,7 +65,12 @@
                 "minimum": -720,
                 "maximum": 840,
                 "default": 0,
-                "description": "Fixed UTC offset in minutes the expression evaluates in; 0 = UTC."
+                "description": "Fixed UTC offset in minutes the expression evaluates in; 0 = UTC. Ignored when tz is set."
+              },
+              "tz": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "IANA timezone e.g. Europe/Berlin. When set, tz_offset_min is ignored and DST is handled correctly."
               }
             },
             "required": ["expr"],
@@ -216,7 +221,8 @@
               "properties": {
                 "type": { "const": "cron" },
                 "expr": { "type": "string" },
-                "tz_offset_min": { "type": "integer", "description": "Fixed UTC offset in minutes; 0 = UTC." }
+                "tz_offset_min": { "type": "integer", "description": "Fixed UTC offset in minutes; 0 = UTC. Ignored when tz is set." },
+                "tz": { "type": "string", "description": "IANA timezone, e.g. Europe/Berlin." }
               },
               "required": ["type", "expr"],
               "additionalProperties": false

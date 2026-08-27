@@ -406,6 +406,103 @@ fn cleanup_temp(temp_path: Option<&std::path::Path>) {
     }
 }
 
+
+pub async fn handle_devices() -> Result<serde_json::Value, String> {
+    let sinks = match try_pactl().await {
+        Ok(v) => v,
+        Err(_) => match try_wpctl().await {
+            Ok(v) => v,
+            Err(_) => Vec::new(),
+        },
+    };
+    let provider = if sinks.is_empty() { "none" } else { "pactl/wpctl" };
+    Ok(serde_json::json!({"sinks": sinks, "provider": provider}))
+}
+
+async fn try_pactl() -> Result<Vec<serde_json::Value>, String> {
+    use tokio::process::Command;
+    let out = tokio::time::timeout(std::time::Duration::from_millis(2000), async {
+        Command::new("pactl").args(["list","sinks","short"]).output().await.map_err(|e| format!("pactl spawn: {e}"))
+    }).await.map_err(|_| "pactl timeout".to_string())??;
+    if !out.status.success() {
+        return Err(format!("pactl failed: {}", String::from_utf8_lossy(&out.stderr)));
+    }
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let mut sinks = Vec::new();
+    for line in text.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 2 {
+            let name = parts[1].to_string();
+            sinks.push(serde_json::json!({"name": name, "description": name.clone(), "state": parts.get(0).unwrap_or(&"").to_string()}));
+        }
+    }
+    if let Ok(long) = tokio::time::timeout(std::time::Duration::from_millis(2000), async {
+        Command::new("pactl").args(["list","sinks"]).output().await.map_err(|e| format!("pactl spawn: {e}"))
+    }).await {
+        if let Ok(out) = long {
+            if out.status.success() {
+                let txt = String::from_utf8_lossy(&out.stdout).to_string();
+                let mut map = std::collections::HashMap::new();
+                let mut cur_name: Option<String> = None;
+                for line in txt.lines() {
+                    let line = line.trim();
+                    if line.starts_with("Name:") {
+                        cur_name = Some(line["Name:".len()..].trim().to_string());
+                    } else if line.starts_with("Description:") {
+                        if let Some(name) = cur_name.take() {
+                            let desc = line["Description:".len()..].trim().to_string();
+                            map.insert(name, desc);
+                        }
+                    }
+                }
+                for sink in &mut sinks {
+                    if let Some(name) = sink.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                        if let Some(desc) = map.get(&name) {
+                            sink["description"] = serde_json::Value::String(desc.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(sinks)
+}
+
+async fn try_wpctl() -> Result<Vec<serde_json::Value>, String> {
+    use tokio::process::Command;
+    let out = tokio::time::timeout(std::time::Duration::from_millis(2000), async {
+        Command::new("wpctl").arg("status").output().await.map_err(|e| format!("wpctl spawn: {e}"))
+    }).await.map_err(|_| "wpctl timeout".to_string())??;
+    if !out.status.success() {
+        return Err(format!("wpctl failed"));
+    }
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let mut sinks = Vec::new();
+    let mut in_sinks = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("Sinks:") { in_sinks = true; continue; }
+        if in_sinks {
+            if trimmed.starts_with("Sources:") || trimmed.starts_with("Streams:") { break; }
+            if trimmed.contains(".") && trimmed.contains("[vol:") {
+                if let Some(dot) = trimmed.find('.') {
+                    let rest = trimmed[dot+1..].trim();
+                    if let Some(bracket) = rest.find(' ') {
+                        let name = rest[..bracket].trim().to_string();
+                        sinks.push(serde_json::json!({"name": name, "description": name.clone(), "state": "RUNNING"}));
+                    } else {
+                        let name = rest.trim().to_string();
+                        if !name.is_empty() { sinks.push(serde_json::json!({"name": name, "description": name.clone(), "state": "RUNNING"})); }
+                    }
+                }
+            }
+        }
+    }
+    if sinks.is_empty() { return Err("wpctl no sinks".into()); }
+    Ok(sinks)
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

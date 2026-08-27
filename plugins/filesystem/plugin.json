@@ -1,14 +1,20 @@
 {
   "plugin_id": "filesystem",
   "version": "0.1.0",
-  "permissions": ["files_read", "files_write"],
+  "permissions": [
+    "files_read",
+    "files_write"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "filesystem",
   "events": [],
-  "files": ["filesystem", "plugin.json"],
+  "files": [
+    "filesystem",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "fs_list",
@@ -26,24 +32,51 @@
             "description": "Include dotfiles in the listing."
           }
         },
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "path": { "type": "string", "description": "Canonical directory path that was listed." },
+          "path": {
+            "type": "string",
+            "description": "Canonical directory path that was listed."
+          },
           "entries": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "name": { "type": "string" },
-                "kind": { "type": "string", "enum": ["file", "dir", "symlink", "other"] },
-                "size_bytes": { "type": "integer" },
-                "modified_unix_ms": { "type": ["integer", "null"], "description": "Unix-ms mtime, null when unavailable." }
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "file",
+                    "dir",
+                    "symlink",
+                    "other"
+                  ]
+                },
+                "size_bytes": {
+                  "type": "integer"
+                },
+                "modified_unix_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Unix-ms mtime, null when unavailable."
+                }
               },
-              "required": ["name", "kind", "size_bytes"],
+              "required": [
+                "name",
+                "kind",
+                "size_bytes"
+              ],
               "additionalProperties": false
             }
           },
@@ -52,7 +85,11 @@
             "description": "True when the entry count hit FILES_PLUGIN_MAX_LIST_ENTRIES."
           }
         },
-        "required": ["path", "entries", "truncated"],
+        "required": [
+          "path",
+          "entries",
+          "truncated"
+        ],
         "additionalProperties": false
       }
     },
@@ -78,18 +115,40 @@
             "description": "Read window; defaults to FILES_PLUGIN_MAX_READ_BYTES, hard-capped at 8 MiB."
           }
         },
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "data": { "type": "string", "description": "File bytes as UTF-8 text, or base64 when the utf8 rule doesn't apply." },
-          "encoding": { "type": "string", "enum": ["utf8", "base64"] },
-          "size_bytes": { "type": "integer", "description": "Number of bytes returned (pre-encoding)." },
-          "truncated": { "type": "boolean", "description": "True when the read window ended before EOF." }
+          "data": {
+            "type": "string",
+            "description": "File bytes as UTF-8 text, or base64 when the utf8 rule doesn't apply."
+          },
+          "encoding": {
+            "type": "string",
+            "enum": [
+              "utf8",
+              "base64"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "description": "Number of bytes returned (pre-encoding)."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when the read window ended before EOF."
+          }
         },
-        "required": ["data", "encoding", "size_bytes", "truncated"],
+        "required": [
+          "data",
+          "encoding",
+          "size_bytes",
+          "truncated"
+        ],
         "additionalProperties": false
       }
     },
@@ -117,16 +176,152 @@
             "description": "Create missing parent directories (inside the sandbox)."
           }
         },
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "written_bytes": { "type": "integer" },
-          "path": { "type": "string", "description": "Canonical absolute path that was written." }
+          "written_bytes": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string",
+            "description": "Canonical absolute path that was written."
+          }
         },
-        "required": ["written_bytes", "path"],
+        "required": [
+          "written_bytes",
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fs_delete",
+      "permission": "files_write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute path inside allowed root."
+          },
+          "to_trash": {
+            "type": "boolean",
+            "default": true,
+            "description": "Move to freedesktop Trash instead of permanent delete."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "trashed": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted",
+          "trashed",
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fs_mkdir",
+      "permission": "files_write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute directory path inside allowed root."
+          },
+          "parents": {
+            "type": "boolean",
+            "default": false,
+            "description": "Create parent directories as needed."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "created",
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fs_rename",
+      "permission": "files_write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Absolute source path inside allowed root."
+          },
+          "to": {
+            "type": "string",
+            "description": "Absolute destination path inside allowed root."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "renamed": {
+            "type": "boolean"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "renamed",
+          "from",
+          "to"
+        ],
         "additionalProperties": false
       }
     }

@@ -56,9 +56,13 @@ pub enum Trigger {
     Cron {
         expr: String,
         /// UTC offset in minutes (−720..=840) the expression evaluates in;
-        /// 0 = UTC. Named IANA zones are a non-goal for v0.1.
+        /// 0 = UTC. Kept for backwards compat; `tz` wins when present.
         #[serde(default)]
         tz_offset_min: i32,
+        /// IANA timezone e.g. "Europe/Berlin". When Some, `tz_offset_min` is
+        /// ignored and the expression evaluates in that zone (DST-aware).
+        #[serde(default)]
+        tz: Option<String>,
     },
 }
 
@@ -108,20 +112,17 @@ pub fn next_fire_ms(doc: &ScheduleDoc) -> Option<i64> {
         Trigger::Cron {
             expr,
             tz_offset_min,
+            tz,
         } => {
-            // Anchor to what we have already accounted for — the last
-            // scheduled fire, or creation for fresh docs. Anchoring to
-            // `now` instead chases its own tail whenever the expression's
-            // granularity matches the scan interval: the "first occurrence
-            // strictly after now" would sit an epsilon ahead of every tick
-            // and never come due.
             let reference = doc.last_fired_ms.unwrap_or(doc.created_at_ms);
-            match next_cron_after_ms(expr, *tz_offset_min, reference) {
+            let res = if let Some(tz_str) = tz.as_deref() {
+                next_cron_after_ms_tz(expr, tz_str, reference)
+            } else {
+                next_cron_after_ms(expr, *tz_offset_min, reference)
+            };
+            match res {
                 Ok(next) => next,
                 Err(e) => {
-                    // Corrupt stored expression: skip loudly instead of
-                    // failing the whole scan (same policy as corrupt
-                    // documents in list).
                     eprintln!("[scheduler] schedule {}: {e}", doc.id);
                     None
                 }
@@ -171,8 +172,6 @@ fn fixed_offset(tz_offset_min: i32) -> Result<FixedOffset, String> {
         .ok_or_else(|| format!("tz_offset_min out of range (-720..=840): {tz_offset_min}"))
 }
 
-/// Parse + validate a cron expression without computing anything
-/// (`schedule_set` rejects invalid expressions up front).
 pub fn validate_cron_expr(expr: &str, tz_offset_min: i32) -> Result<(), String> {
     let normalized = normalize_cron_expr(expr);
     Schedule::from_str(&normalized)
@@ -182,9 +181,23 @@ pub fn validate_cron_expr(expr: &str, tz_offset_min: i32) -> Result<(), String> 
     Ok(())
 }
 
-/// First cron occurrence strictly after `after_ms`, evaluated in the given
-/// fixed UTC offset. Missed occurrences during downtime are never backfilled
-/// — the next scan resumes from "first occurrence after now".
+pub fn validate_cron_expr_tz(expr: &str, tz: Option<&str>, tz_offset_min: i32) -> Result<(), String> {
+    let normalized = normalize_cron_expr(expr);
+    Schedule::from_str(&normalized)
+        .map(|_| ())
+        .map_err(|e| format!("invalid cron expression {expr:?}: {e}"))?;
+    if let Some(tz_str) = tz {
+        parse_tz(tz_str)?;
+    } else {
+        fixed_offset(tz_offset_min)?;
+    }
+    Ok(())
+}
+
+fn parse_tz(tz_str: &str) -> Result<chrono_tz::Tz, String> {
+    tz_str.parse::<chrono_tz::Tz>().map_err(|_| format!("invalid IANA timezone {tz_str:?}"))
+}
+
 pub fn next_cron_after_ms(
     expr: &str,
     tz_offset_min: i32,
@@ -202,6 +215,20 @@ pub fn next_cron_after_ms(
         .after(&after)
         .next()
         .map(|dt| dt.with_timezone(&Utc).timestamp_millis()))
+}
+
+pub fn next_cron_after_ms_tz(
+    expr: &str,
+    tz_str: &str,
+    after_ms: i64,
+) -> Result<Option<i64>, String> {
+    let tz = parse_tz(tz_str)?;
+    let normalized = normalize_cron_expr(expr);
+    let sched = Schedule::from_str(&normalized)
+        .map_err(|e| format!("invalid cron expression {expr:?}: {e}"))?;
+    let after_utc: DateTime<Utc> = Utc.timestamp_millis_opt(after_ms).single().ok_or_else(|| format!("timestamp out of range: {after_ms}"))?;
+    let after_tz = after_utc.with_timezone(&tz);
+    Ok(sched.after(&after_tz).next().map(|dt| dt.with_timezone(&Utc).timestamp_millis()))
 }
 
 #[cfg(test)]

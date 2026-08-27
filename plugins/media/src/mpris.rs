@@ -53,6 +53,7 @@ pub trait MprisBackend: Send + Sync {
     async fn get_loop_status(&self, player: &str) -> Result<String, String>;
     async fn set_loop_status(&self, player: &str, status: &str) -> Result<(), String>;
     async fn get_capability(&self, player: &str, prop: &str) -> Result<bool, String>;
+    async fn call_root_method(&self, player: &str, method: &str) -> Result<(), String>;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +364,11 @@ impl MprisBackend for RealBackend {
         Ok(())
     }
 
+    async fn call_root_method(&self, player: &str, method: &str) -> Result<(), String> {
+        let conn = Connection::session().await.map_err(|e| format!("ERR_MEDIA_BUS_UNAVAILABLE: {e}"))?;
+        conn.call_method(Some(player), MPRIS_PATH, Some("org.mpris.MediaPlayer2"), method, &()).await.map_err(|e| wrap_control_err(player, method, &e.to_string()))?;
+        Ok(())
+    }
     async fn get_capability(&self, player: &str, prop: &str) -> Result<bool, String> {
         let conn = Connection::session()
             .await
@@ -933,6 +939,22 @@ fn extrapolate_position(player: &str, raw_pos: i64, rate: f64, playback: &str) -
     result
 }
 
+
+pub async fn raise(player: Option<&str>) -> Result<serde_json::Value, String> { raise_with(&RealBackend, player).await }
+async fn raise_with<B: MprisBackend>(backend: &B, player: Option<&str>) -> Result<serde_json::Value, String> {
+    let available = list_players_with(backend).await?;
+    let target = resolve_player(player, &available)?;
+    backend.call_root_method(&target, "Raise").await?;
+    Ok(serde_json::json!({"ok": true}))
+}
+pub async fn quit(player: Option<&str>) -> Result<serde_json::Value, String> { quit_with(&RealBackend, player).await }
+async fn quit_with<B: MprisBackend>(backend: &B, player: Option<&str>) -> Result<serde_json::Value, String> {
+    let available = list_players_with(backend).await?;
+    let target = resolve_player(player, &available)?;
+    backend.call_root_method(&target, "Quit").await?;
+    Ok(serde_json::json!({"ok": true}))
+}
+
 pub async fn set_shuffle(player: Option<&str>, enabled: bool) -> Result<serde_json::Value, String> {
     set_shuffle_with(&RealBackend, player, enabled).await
 }
@@ -1186,6 +1208,7 @@ mod tests {
         async fn set_shuffle(&self, _player: &str, _v: bool) -> Result<(), String> { Ok(()) }
         async fn get_loop_status(&self, _player: &str) -> Result<String, String> { Ok(self.loop_status.clone()) }
         async fn set_loop_status(&self, _player: &str, _s: &str) -> Result<(), String> { Ok(()) }
+        async fn call_root_method(&self, _player: &str, _method: &str) -> Result<(), String> { Ok(()) }
         async fn get_capability(&self, _player: &str, prop: &str) -> Result<bool, String> {
             Ok(*self.caps.get(prop).unwrap_or(&true))
         }
