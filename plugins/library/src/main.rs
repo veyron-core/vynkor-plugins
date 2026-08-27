@@ -159,7 +159,6 @@ mod tests {
     use std::collections::{BTreeMap, HashMap as StdHashMap};
     use std::time::Duration;
     use tokio::net::UnixStream;
-    use tokio::sync::Mutex;
     use vynkor_sdk::proto::{ActionResponse as ProtoActionResponse, EventPublishAck, EventPublishStatus, PluginRegisterAck};
 
     #[derive(Default)]

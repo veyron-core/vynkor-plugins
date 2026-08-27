@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use walkdir::WalkDir;
 use crate::store::{kind_for_ext, Entry, id_for_path, now_ms};
 
