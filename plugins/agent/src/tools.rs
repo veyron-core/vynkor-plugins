@@ -31,6 +31,7 @@ use std::collections::BTreeMap;
 
 pub const ALLOWED_ACTIONS_ENV: &str = "AGENT_PLUGIN_ALLOWED_ACTIONS";
 pub const TOOLS_FILE_ENV: &str = "AGENT_PLUGIN_TOOLS_FILE";
+pub const APPROVALS_FILE_ENV: &str = "AGENT_PLUGIN_APPROVALS_FILE";
 /// `off` disables kernel manifest discovery (static catalog only).
 pub const DISCOVERY_ENV: &str = "AGENT_PLUGIN_DISCOVERY";
 
@@ -167,6 +168,18 @@ fn parse_spec(v: &serde_json::Value, index: usize) -> Result<ToolSpec, String> {
     })
 }
 
+
+fn parse_approvals_file(raw: &str) -> Result<std::collections::BTreeMap<String, bool>, String> {
+    let v: serde_json::Value = serde_json::from_str(raw).map_err(|e| format!("approvals file is not valid JSON: {e}"))?;
+    let obj = v.as_object().ok_or_else(|| "approvals file must be an object {\"tool\": bool}" .to_string())?;
+    let mut map = std::collections::BTreeMap::new();
+    for (k, val) in obj {
+        let b = val.as_bool().ok_or_else(|| format!("approvals entry \"{k}\" must be boolean (true=requires confirmation)"))?;
+        map.insert(k.clone(), b);
+    }
+    Ok(map)
+}
+
 fn parse_tools_file(raw: &str) -> Result<BTreeMap<String, ToolSpec>, String> {
     let body: serde_json::Value = serde_json::from_str(raw)
         .map_err(|e| format!("tools file is not valid JSON: {e}"))?;
@@ -213,21 +226,34 @@ impl Catalog {
             None => BTreeMap::new(),
         };
 
+        let approvals = match std::env::var(APPROVALS_FILE_ENV).ok().filter(|s| !s.is_empty()) {
+            Some(path) => {
+                let raw = std::fs::read_to_string(&path).map_err(|e| format!("cannot read approvals file \"{path}\": {e}"))?;
+                parse_approvals_file(&raw)?
+            }
+            None => std::collections::BTreeMap::new(),
+        };
         let tools = allowed
             .iter()
-            .map(|name| match specs.get(name) {
-                Some(spec) => spec.clone(),
-                None => ToolSpec {
-                    name: name.clone(),
-                    description: String::new(),
-                    parameters: serde_json::Value::Null,
-                    requires_confirmation: false,
-                    risk: String::new(),
-                    timeout_ms: TOOL_TIMEOUT_DEFAULT_MS,
-                    cooldown_ms: 0,
-                    max_per_goal: 16,
-                    source: Source::Minimal,
-                },
+            .map(|name| {
+                let mut spec = match specs.get(name) {
+                    Some(s) => s.clone(),
+                    None => ToolSpec {
+                        name: name.clone(),
+                        description: String::new(),
+                        parameters: serde_json::Value::Null,
+                        requires_confirmation: false,
+                        risk: String::new(),
+                        timeout_ms: TOOL_TIMEOUT_DEFAULT_MS,
+                        cooldown_ms: 0,
+                        max_per_goal: 16,
+                        source: Source::Minimal,
+                    },
+                };
+                if let Some(&confirm) = approvals.get(name) {
+                    spec.requires_confirmation = confirm;
+                }
+                spec
             })
             .collect();
 
