@@ -6,4 +6,6 @@
 //! Text-only v1 (`text/plain`, UTF-8).
 
 pub mod handler;
+pub mod history;
 pub mod providers;
+pub mod lib_rpc;
