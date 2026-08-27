@@ -43,6 +43,14 @@ file is the cross-plugin picture only.
 
 | `automations` | `plugins/automations/` | `database` | declarative `trigger(event) → [conditions] → action` rules engine (CAP-01); cron pairing via subscribing to `plugin.scheduler.fired`; confirmation-hold semantics like gated-write's D-09 spirit (`PERMISSION_STORAGE`, `PERMISSION_EVENT_PUBLISH`) |
 | `speech` | `plugins/speech/` | — | `tts`+`stt` merged into one binary (MRG-01) via verbatim path-dep sub-crates; identical actions/events/env; singles stay shipped |
+| `weather` | `plugins/weather/` | `network` | Open-Meteo current + forecast (INT-08): `weather_now`/`weather_forecast` via `network` gated `http_request`, no key, `PERMISSION_NETWORK`, 9 tests |
+| `contacts` | `plugins/contacts/` | `database` | Contact store (INT-12): `contact_create/get/list/update/delete` thin schema `contact:<id>` over `database`, `PERMISSION_STORAGE`+`EVENT_PUBLISH`, 13 tests |
+| `tasks` | `plugins/tasks/` | `database` | Task store (INT-19): `task_create/get/list/update/done/delete` thin schema `task:<id>`, `PERMISSION_STORAGE`+`EVENT_PUBLISH`, 10 tests |
+| `metrics` | `plugins/metrics/` | — | Host metrics (CAP-03): periodic `/proc`/`statvfs`/`power_supply` samples into `database`, `metrics_query/latest/stats/status` + `sample` events, `PERMISSION_STORAGE` |
+| `uptime` | `plugins/uptime/` | `database`, `network` | Health monitor (INT-15): `uptime_add/remove/list/check/history/status` periodic `http_request` checks, `PERMISSION_STORAGE`+`NETWORK` |
+| `rss` | `plugins/rss/` | `database`, `network` | Feed reader (INT-05): `rss_add/remove/list/fetch/fetch_all/articles/mark_read/status` `feed:<id>`/`article:<id>` over `database`, dedup by link, `PERMISSION_STORAGE`+`NETWORK` |
+| `library` | `plugins/library/` | `database` | Media library index (CAP-09): `library_scan/search/get/random/recent/stats` WalkDir `library:<id>` over `database`, allowlist `LIBRARY_PLUGIN_ALLOWED_ROOTS`, `PERMISSION_STORAGE`+`FILES_READ` |
+| `github` | `plugins/github/` | `network`, `secrets` | GitHub outbound (INT-06): `gh_list_issues/gh_create_issue/gh_list_prs/gh_list_runs` via `network` `http_request`, vault-first PAT `GITHUB_PLUGIN_ALLOWED_PAT_ENVS`, `PERMISSION_NETWORK`+`SECRETS` |
 
 ## Planned
 
