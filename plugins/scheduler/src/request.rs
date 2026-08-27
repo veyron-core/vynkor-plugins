@@ -9,7 +9,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::model::{validate_cron_expr, Fire, Trigger};
+use crate::model::{validate_cron_expr_tz, Fire, Trigger};
 
 pub const MAX_NAME_BYTES: usize = 256;
 pub const MAX_CRON_BYTES: usize = 128;
@@ -74,6 +74,8 @@ struct CronParams {
     expr: String,
     #[serde(default)]
     tz_offset_min: i32,
+    #[serde(default)]
+    tz: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -189,17 +191,32 @@ fn parse_trigger(p: &SetParams, now_ms: i64) -> Result<Trigger, String> {
         },
         (None, Some(c)) => {
             check_size("cron.expr", &c.expr, MAX_CRON_BYTES)?;
-            if !(MIN_TZ_OFFSET_MIN..=MAX_TZ_OFFSET_MIN).contains(&c.tz_offset_min) {
-                return Err(format!(
-                    "params.cron.tz_offset_min must be between {MIN_TZ_OFFSET_MIN} and \
-                     {MAX_TZ_OFFSET_MIN}"
-                ));
+            let tz = match &c.tz {
+                Some(s) => {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() { return Err("params.cron.tz must not be empty when present".into()); }
+                    if trimmed.len() > 64 { return Err("params.cron.tz exceeds 64 bytes".into()); }
+                    Some(trimmed.to_string())
+                }
+                None => None,
+            };
+            if tz.is_some() {
+                if c.tz_offset_min != 0 {
+                    // tz wins; warn via validation that offset is ignored when tz present
+                    // still validate the offset range for storage compat but don't require 0
+                    if !(MIN_TZ_OFFSET_MIN..=MAX_TZ_OFFSET_MIN).contains(&c.tz_offset_min) {
+                        return Err(format!("params.cron.tz_offset_min must be between {MIN_TZ_OFFSET_MIN} and {MAX_TZ_OFFSET_MIN}"));
+                    }
+                }
+                validate_cron_expr_tz(&c.expr, tz.as_deref(), 0)?;
+                Ok(Trigger::Cron { expr: c.expr.clone(), tz_offset_min: c.tz_offset_min, tz })
+            } else {
+                if !(MIN_TZ_OFFSET_MIN..=MAX_TZ_OFFSET_MIN).contains(&c.tz_offset_min) {
+                    return Err(format!("params.cron.tz_offset_min must be between {MIN_TZ_OFFSET_MIN} and {MAX_TZ_OFFSET_MIN}"));
+                }
+                validate_cron_expr_tz(&c.expr, None, c.tz_offset_min)?;
+                Ok(Trigger::Cron { expr: c.expr.clone(), tz_offset_min: c.tz_offset_min, tz: None })
             }
-            validate_cron_expr(&c.expr, c.tz_offset_min)?;
-            Ok(Trigger::Cron {
-                expr: c.expr.clone(),
-                tz_offset_min: c.tz_offset_min,
-            })
         }
     }
 }
@@ -356,7 +373,8 @@ mod tests {
             s.trigger,
             Trigger::Cron {
                 expr: "0 3 * * *".into(),
-                tz_offset_min: 180
+                tz_offset_min: 180,
+                tz: None
             }
         );
     }
