@@ -1,0 +1,137 @@
+pub mod request;
+pub mod store;
+
+use serde_json::{json, Value};
+use tokio::sync::{mpsc, oneshot};
+use store::{Check, Target};
+
+#[derive(Debug, Clone)]
+pub struct Config {
+    pub interval_secs: u64,
+    pub max_checks: usize,
+    pub db_timeout_ms: u32,
+    pub check_timeout_ms: u32,
+}
+impl Default for Config {
+    fn default() -> Self { Self { interval_secs: 60, max_checks: 5000, db_timeout_ms: 5000, check_timeout_ms: 5000 } }
+}
+impl Config {
+    pub fn from_env() -> Self {
+        let interval_secs = std::env::var("UPTIME_PLUGIN_INTERVAL_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(60);
+        let max_checks = std::env::var("UPTIME_PLUGIN_MAX_CHECKS").ok().and_then(|s| s.parse().ok()).unwrap_or(5000);
+        let db_timeout_ms = std::env::var("UPTIME_PLUGIN_DB_TIMEOUT_MS").ok().and_then(|s| s.parse().ok()).unwrap_or(5000);
+        let check_timeout_ms = std::env::var("UPTIME_PLUGIN_CHECK_TIMEOUT_MS").ok().and_then(|s| s.parse().ok()).unwrap_or(5000);
+        Self { interval_secs, max_checks, db_timeout_ms, check_timeout_ms }
+    }
+}
+
+pub struct RpcCall { pub action: String, pub params_json: Vec<u8>, pub timeout_ms: u32, pub reply: oneshot::Sender<Result<Value, String>> }
+#[derive(Clone)]
+pub struct Rpc { tx: mpsc::Sender<RpcCall> }
+impl Rpc {
+    pub fn new(tx: mpsc::Sender<RpcCall>) -> Self { Self { tx } }
+    pub async fn call(&self, action: &str, params: Value, timeout_ms: u32) -> Result<Value, String> {
+        let params_json = serde_json::to_vec(&params).map_err(|e| format!("failed to encode {action} params: {e}"))?;
+        let (reply, rx) = oneshot::channel();
+        self.tx.send(RpcCall { action: action.to_string(), params_json, timeout_ms, reply }).await.map_err(|_| format!("{action} aborted"))?;
+        let effective = if timeout_ms==0 {30_000} else {timeout_ms};
+        match tokio::time::timeout(std::time::Duration::from_millis(effective as u64), rx).await {
+            Ok(Ok(r)) => r,
+            Ok(Err(_)) => Err(format!("{action} aborted")),
+            Err(_) => Err(format!("{action} timed out after {effective} ms")),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ActionResult { pub data: Vec<u8>, pub event: Option<(String, Value)> }
+
+pub async fn handle_action(rpc: Rpc, config: &Config, action: &str, params_json: &[u8], start: std::time::Instant) -> Result<ActionResult, String> {
+    let req = request::parse_request(action, params_json)?;
+    let db = store::Db::new(rpc.clone(), config.db_timeout_ms);
+    match req {
+        request::UptimeRequest::Add { url } => {
+            // dedup by url
+            let existing = db.list_targets().await?;
+            if let Some(t) = existing.iter().find(|t| t.url==url) {
+                return ok(json!({"id": t.id, "target": t}), None);
+            }
+            let id = db.next_id(store::NEXT_TARGET_ID).await?.to_string();
+            let now = store::now_ms();
+            let target = Target { id: id.clone(), url: url.clone(), created_at_ms: now };
+            db.put_target(&target).await?;
+            ok(json!({"id": id, "target": target}), Some(("target_added".into(), json!({"id": id, "url": url}))))
+        }
+        request::UptimeRequest::Remove { id } => {
+            let removed = db.delete_target(&id).await?;
+            ok(json!({"removed": removed}), removed.then(|| ("target_removed".into(), json!({"id": id}))))
+        }
+        request::UptimeRequest::List => {
+            let mut targets = db.list_targets().await?;
+            targets.sort_by(|a,b| a.created_at_ms.cmp(&b.created_at_ms));
+            ok(json!({"targets": targets}), None)
+        }
+        request::UptimeRequest::Check { url, timeout_ms } => {
+            let res = do_check(rpc.clone(), &url, timeout_ms).await;
+            // store check
+            let id = db.next_id(store::NEXT_CHECK_ID).await?.to_string();
+            let now = store::now_ms();
+            let check = Check { id: id.clone(), url: url.clone(), timestamp_ms: now, ok: res.ok, status: res.status, latency_ms: res.latency_ms, error: res.error.clone() };
+            let _ = db.put_check(&check).await;
+            let _ = db.trim_checks(config.max_checks).await;
+            let event = if !res.ok { Some(("check_failed".into(), json!({"url": url, "status": res.status, "error": res.error}))) } else { None };
+            ok(json!({"url": url, "ok": res.ok, "status": res.status, "latency_ms": res.latency_ms, "error": res.error}), event)
+        }
+        request::UptimeRequest::History { url, limit, offset } => {
+            let mut checks = db.list_checks().await?;
+            if let Some(u) = url { checks.retain(|c| c.url==u); }
+            checks.sort_by(|a,b| b.timestamp_ms.cmp(&a.timestamp_ms));
+            let total = checks.len();
+            let page: Vec<&Check> = checks.iter().skip(offset).take(limit).collect();
+            ok(json!({"checks": page, "total": total}), None)
+        }
+        request::UptimeRequest::Status => {
+            let uptime_ms = start.elapsed().as_millis() as u64;
+            ok(json!({"version": "0.1.0", "uptime_ms": uptime_ms, "engine_ready": true, "last_error": Value::Null, "counters": {}}), None)
+        }
+    }
+}
+
+struct CheckResult { ok: bool, status: i32, latency_ms: u64, error: Option<String> }
+
+async fn do_check(rpc: Rpc, url: &str, timeout_ms: u64) -> CheckResult {
+    let start = std::time::Instant::now();
+    let http_req = serde_json::json!({"url": url, "method": "GET", "timeout_ms": timeout_ms, "follow_redirects": true});
+    let res = rpc.call("http_request", http_req, timeout_ms as u32).await;
+    let latency_ms = start.elapsed().as_millis() as u64;
+    match res {
+        Ok(v) => {
+            let status = v.get("status").and_then(Value::as_i64).unwrap_or(0) as i32;
+            let ok = (200..300).contains(&status);
+            let err = if ok { None } else { Some(format!("HTTP {status}")) };
+            CheckResult { ok, status, latency_ms, error: err }
+        }
+        Err(e) => CheckResult { ok: false, status: 0, latency_ms, error: Some(e) },
+    }
+}
+
+pub async fn scan_all(rpc: Rpc, config: &Config) -> Result<usize, String> {
+    let db = store::Db::new(rpc.clone(), config.db_timeout_ms);
+    let targets = db.list_targets().await?;
+    let mut n=0;
+    for t in targets {
+        let res = do_check(rpc.clone(), &t.url, config.check_timeout_ms as u64).await;
+        let id = db.next_id(store::NEXT_CHECK_ID).await?.to_string();
+        let now = store::now_ms();
+        let check = Check { id, url: t.url.clone(), timestamp_ms: now, ok: res.ok, status: res.status, latency_ms: res.latency_ms, error: res.error };
+        let _ = db.put_check(&check).await;
+        n+=1;
+    }
+    let _ = db.trim_checks(config.max_checks).await;
+    Ok(n)
+}
+
+fn ok(data: Value, event: Option<(String, Value)>) -> Result<ActionResult, String> {
+    let data = serde_json::to_vec(&data).map_err(|e| format!("encode: {e}"))?;
+    Ok(ActionResult { data, event })
+}
