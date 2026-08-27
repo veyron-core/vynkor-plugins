@@ -87,6 +87,31 @@ async fn dispatch_and_observe(
     Ok(ok)
 }
 
+fn check_quota(doc: &GoalDoc, spec: &crate::tools::ToolSpec) -> Result<(), String> {
+    let count = doc.tool_counts.get(&spec.name).copied().unwrap_or(0);
+    if spec.max_per_goal > 0 && count >= spec.max_per_goal {
+        return Err(format!(
+            "tool '{}' quota exceeded: max {} calls per goal (used {})",
+            spec.name, spec.max_per_goal, count
+        ));
+    }
+    if spec.cooldown_ms > 0 {
+        if let Some(last) = doc.tool_last_ms.get(&spec.name) {
+            let now = store::now_ms();
+            let elapsed = now - *last;
+            if elapsed < spec.cooldown_ms as i64 {
+                return Err(format!(
+                    "tool '{}' is on cooldown: {}ms remaining (cooldown {}ms)",
+                    spec.name,
+                    spec.cooldown_ms as i64 - elapsed,
+                    spec.cooldown_ms
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Run (or continue) one goal to a terminal or halting state. Storage
 /// failures bubble as `Err`; every other outcome is recorded on the doc.
 pub async fn run(
@@ -110,8 +135,19 @@ pub async fn run(
         Entry::ApprovedResume => {
             let name = std::mem::take(&mut doc.pending_tool);
             let params = std::mem::replace(&mut doc.pending_params, Value::Null);
-            let timeout = catalog.get(&name).map(|s| s.timeout_ms).unwrap_or(30_000);
+            let spec = catalog.get(&name);
+            let timeout = spec.map(|s| s.timeout_ms).unwrap_or(30_000);
             doc.status = store::STATUS_RUNNING.to_string();
+            if let Some(s) = spec {
+                if let Err(e) = check_quota(doc, s) {
+                    push_turn(doc, "user", format!("[TOOL RESULT name={} status=error]\n{e}", name))?;
+                    next_step(doc, "tool_error", json!({"tool": name, "error": e}));
+                    persist(db, doc).await?;
+                    return Ok(());
+                }
+                doc.tool_counts.entry(name.clone()).and_modify(|c| *c += 1).or_insert(1);
+                doc.tool_last_ms.insert(name.clone(), store::now_ms());
+            }
             dispatch_and_observe(rpc, doc, timeout, &name, params).await?;
             persist(db, doc).await?;
         }
@@ -207,6 +243,15 @@ pub async fn run(
                     persist(db, doc).await?;
                     return Ok(());
                 }
+                if let Err(quota_err) = check_quota(doc, spec) {
+                    let msg = quota_err.clone();
+                    push_turn(doc, "user", format!("[TOOL RESULT name={name} status=error]\n{msg}"))?;
+                    next_step(doc, "tool_error", json!({"tool": name, "error": msg}));
+                    persist(db, doc).await?;
+                    continue;
+                }
+                doc.tool_counts.entry(name.clone()).and_modify(|c| *c += 1).or_insert(1);
+                doc.tool_last_ms.insert(name.clone(), store::now_ms());
                 dispatch_and_observe(rpc, doc, spec.timeout_ms, &name, params).await?;
                 persist(db, doc).await?;
             }

@@ -66,6 +66,10 @@ pub struct ToolSpec {
     #[serde(default)]
     pub risk: String,
     pub timeout_ms: u32,
+    #[serde(default)]
+    pub cooldown_ms: u64,
+    #[serde(default)]
+    pub max_per_goal: u32,
     pub source: Source,
 }
 
@@ -138,6 +142,18 @@ fn parse_spec(v: &serde_json::Value, index: usize) -> Result<ToolSpec, String> {
             (raw as u32).clamp(TOOL_TIMEOUT_MIN_MS, TOOL_TIMEOUT_MAX_MS)
         }
     };
+    let cooldown_ms = match obj.get("cooldown_ms") {
+        None | Some(serde_json::Value::Null) => 0,
+        Some(n) => n.as_u64().ok_or_else(|| format!("tools file entry \"{name}\": \"cooldown_ms\" must be a non-negative integer"))?,
+    };
+    let max_per_goal = match obj.get("max_per_goal") {
+        None | Some(serde_json::Value::Null) => 16,
+        Some(n) => {
+            let raw = n.as_u64().ok_or_else(|| format!("tools file entry \"{name}\": \"max_per_goal\" must be a non-negative integer"))?;
+            if raw > 1000 { return Err(format!("tools file entry \"{name}\": \"max_per_goal\" must be <= 1000")); }
+            raw as u32
+        }
+    };
     Ok(ToolSpec {
         name: name.to_string(),
         description,
@@ -145,6 +161,8 @@ fn parse_spec(v: &serde_json::Value, index: usize) -> Result<ToolSpec, String> {
         requires_confirmation,
         risk,
         timeout_ms,
+        cooldown_ms,
+        max_per_goal,
         source: Source::File,
     })
 }
@@ -206,6 +224,8 @@ impl Catalog {
                     requires_confirmation: false,
                     risk: String::new(),
                     timeout_ms: TOOL_TIMEOUT_DEFAULT_MS,
+                    cooldown_ms: 0,
+                    max_per_goal: 16,
                     source: Source::Minimal,
                 },
             })
@@ -258,6 +278,8 @@ mod tests {
             requires_confirmation: false,
             risk: String::new(),
             timeout_ms: 30_000,
+            cooldown_ms: 0,
+            max_per_goal: 16,
             source: Source::Minimal,
         }
     }
