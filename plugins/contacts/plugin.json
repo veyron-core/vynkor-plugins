@@ -1,0 +1,149 @@
+{
+  "plugin_id": "contacts",
+  "version": "0.1.0",
+  "permissions": ["PERMISSION_STORAGE", "PERMISSION_EVENT_PUBLISH"],
+  "kernel_compatibility_range": {
+    "min": "0.1.0",
+    "max": "*"
+  },
+  "binary": "contacts",
+  "events": [],
+  "files": ["contacts", "plugin.json"],
+  "actions": [
+    {
+      "name": "contact_create",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Display name, required. Trimmed." },
+          "email": { "type": "string", "maxLength": 256, "description": "Email, optional. Validated lightly." },
+          "phone": { "type": "string", "maxLength": 64, "description": "Phone, optional." },
+          "notes": { "type": "string", "maxLength": 4096, "description": "Freeform notes, optional." },
+          "tags": { "type": "array", "items": { "type": "string" }, "maxItems": 32, "description": "Tags: trimmed, empties dropped, deduped, each ≤64 bytes." }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "contact": { "$ref": "#/$defs/contact" }
+        },
+        "required": ["id", "contact"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "contact_get",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "found": { "type": "boolean" },
+          "contact": { "$ref": "#/$defs/contact" }
+        },
+        "required": ["found"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "contact_list",
+      "input": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Case-insensitive substring over name/email/phone/notes. Optional." },
+          "tag": { "type": "string", "description": "Only contacts carrying this tag. Optional." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+          "offset": { "type": "integer", "minimum": 0, "default": 0 }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "contacts": { "type": "array", "items": { "$ref": "#/$defs/contact" } },
+          "total": { "type": "integer" }
+        },
+        "required": ["contacts", "total"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "contact_update",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "email": { "type": "string", "maxLength": 256 },
+          "phone": { "type": "string", "maxLength": 64 },
+          "notes": { "type": "string", "maxLength": 4096 },
+          "tags": { "type": "array", "items": { "type": "string" }, "maxItems": 32 }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "updated": { "type": "boolean" },
+          "contact": { "$ref": "#/$defs/contact" }
+        },
+        "required": ["updated", "contact"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "contact_delete",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "deleted": { "type": "boolean" }
+        },
+        "required": ["deleted"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "$defs": {
+    "contact": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "notes": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "created_at_ms": { "type": "integer" },
+        "updated_at_ms": { "type": "integer" }
+      },
+      "required": ["id", "name", "email", "phone", "notes", "tags", "created_at_ms", "updated_at_ms"],
+      "additionalProperties": false
+    }
+  },
+  "config_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "CONTACTS_PLUGIN_DB_TIMEOUT_MS": { "type": "integer", "minimum": 1, "default": 5000, "description": "Timeout for each database IPC call." }
+    },
+    "additionalProperties": true
+  }
+}
