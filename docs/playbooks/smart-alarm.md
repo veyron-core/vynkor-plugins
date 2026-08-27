@@ -1,4 +1,4 @@
-# PLAY-02: Smart Alarm — крон + нарастающий volume + брифинг
+# PLAY-02: Smart Alarm — cron + rising volume + briefing
 
 Cron (scheduler) → `sound_play` with rising volume → `PLAY-01` briefing (weather + calendar.due + rss).
 
@@ -41,14 +41,14 @@ Simpler: single alarm that triggers an `automations` rule which does the ramp:
   "params": {
     "id": "smart-alarm",
     "trigger": {"event": "plugin.scheduler.fired", "conditions": [{"pointer": "/schedule_id", "equals": "alarm-0730-weekdays"}]},
-    "action": {"name": "goal_start", "params": {"goal": "разбуди меня: включи alarm.mp3 тихо, через 30с громко, затем расскажи погоду и мои встречи на сегодня"}}
+    "action": {"name": "goal_start", "params": {"goal": "wake me up: play alarm.mp3 quietly, in 30s loudly, then give weather and today's meetings with voice"}}
   }
 }
 ```
 
 ## Briefing goal (agent does TTS)
 
-`goal_start {"goal": "утренний брифинг: weather_forecast 55.75,37.61 + calendar due + скажи голосом"}`
+`goal_start {"goal": "morning briefing: weather_forecast 55.75,37.61 + today's calendar + speak with voice"}`
 
 The agent:
 1. `weather_forecast {"lat":55.75,"lon":37.61,"days":1,"timezone":"Europe/Moscow"}`
@@ -58,7 +58,7 @@ The agent:
 ## Via `vyn ask`
 
 ```bash
-vyn ask "поставь будильник на будни в 7:30 с нарастающим звуком и брифингом"
+vyn ask "set weekday alarm at 7:30 with rising volume and briefing"
 ```
 
 ## Notes

@@ -1,6 +1,6 @@
-# PLAY-01: Sleep Timer — «подкаст на полчаса»
+# PLAY-01: Sleep Timer — "podcast for 30 minutes"
 
-Two primitives: `sound_play` + `scheduler` one-shot → `sound_stop`. No code after `automations`/`scheduler` shipped.
+Two primitives: `sound_play` + `scheduler` one-shot → `sound_stop`. No code needed after `automations`/`scheduler`.
 
 ## 1. One-shot via `scheduler` (simplest)
 
@@ -18,11 +18,9 @@ Two primitives: `sound_play` + `scheduler` one-shot → `sound_stop`. No code af
 }
 ```
 
-Agent: `goal_start {"goal": "включи подкаст на полчаса"}` → does both calls.
+Agent: `goal_start {"goal": "play podcast for 30 minutes"}` → does both calls.
 
 ## 2. As `automations` rule (reusable)
-
-Create a rule that exposes `sleep_timer` as an action-like shortcut:
 
 ```json
 {
@@ -43,13 +41,13 @@ Then `sound_play` + trigger the rule.
 ## 3. Via `vyn ask`
 
 ```bash
-vyn ask "включи /home/user/sleep.mp3 на 20 минут и выключи"
+vyn ask "play /home/user/sleep.mp3 for 20 minutes then stop"
 ```
 
-Agent maps "на N минут" → `schedule_set` with `delay_ms = N*60000`.
+Agent maps "for N minutes" → `schedule_set` with `delay_ms = N*60000`.
 
 ## Notes
 
-- No `PERMISSION_*` grant needed for `sound_stop` (same `PERMISSION_AUDIO` as `sound_play`; `scheduler` holds `STORAGE` only).
+- No extra permission needed for `sound_stop` (same `PERMISSION_AUDIO` as `sound_play`).
 - To cancel: `schedule_delete {"id": "sleep-30m"}` or `sound_stop` immediately.
 - For streaming radio: same pattern, `sound_play {url: "https://..."}` if `sound` supports URL (ffplay path).
