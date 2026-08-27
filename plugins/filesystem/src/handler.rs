@@ -34,6 +34,9 @@ impl Handler {
             Request::List(p) => self.fs_list(&p),
             Request::Read(p) => self.fs_read(&p),
             Request::Write(p) => self.fs_write(&p),
+            Request::Delete(p) => self.fs_delete(&p),
+            Request::Mkdir(p) => self.fs_mkdir(&p),
+            Request::Rename(p) => self.fs_rename(&p),
         }
     }
 
@@ -170,6 +173,73 @@ impl Handler {
             "path": resolved.path.display().to_string(),
         }))
     }
+
+    pub fn fs_delete(&self, p: &crate::request::DeleteParams) -> Result<Value, String> {
+        let resolved = self.sandbox.resolve(Path::new(&p.path))?;
+        if resolved.is_root {
+            return Err(format!("ERR_FILES_IS_A_DIRECTORY: refusing to delete allowed root {}", p.path));
+        }
+        let meta = fs::symlink_metadata(&resolved.path).map_err(|e| not_found_or_io(&p.path, e))?;
+        // Do not follow symlink dir escapes - we already resolved via sandbox, but deleting symlink itself is fine
+        if p.to_trash {
+            trash_move(&resolved.path, &meta)?;
+            Ok(json!({"deleted": true, "trashed": true, "path": resolved.path.display().to_string()}))
+        } else {
+            if meta.is_dir() && !meta.file_type().is_symlink() {
+                fs::remove_dir_all(&resolved.path).map_err(|e| write_io(&p.path, e))?;
+            } else {
+                fs::remove_file(&resolved.path).map_err(|e| write_io(&p.path, e))?;
+            }
+            Ok(json!({"deleted": true, "trashed": false, "path": resolved.path.display().to_string()}))
+        }
+    }
+
+    pub fn fs_mkdir(&self, p: &crate::request::MkdirParams) -> Result<Value, String> {
+        let resolved = self.sandbox.resolve(Path::new(&p.path))?;
+        if resolved.path.exists() {
+            let m = fs::symlink_metadata(&resolved.path).map_err(|e| not_found_or_io(&p.path, e))?;
+            if m.is_dir() {
+                return Ok(json!({"created": false, "path": resolved.path.display().to_string()}));
+            } else {
+                return Err(format!("ERR_FILES_EXISTS: path {} exists and is not a directory", p.path));
+            }
+        }
+        if p.parents {
+            fs::create_dir_all(&resolved.path).map_err(|e| create_parents_io(&p.path, e))?;
+        } else {
+            fs::create_dir(&resolved.path).map_err(|e| create_parents_io(&p.path, e))?;
+        }
+        Ok(json!({"created": true, "path": resolved.path.display().to_string()}))
+    }
+
+    pub fn fs_rename(&self, p: &crate::request::RenameParams) -> Result<Value, String> {
+        let from_resolved = self.sandbox.resolve(Path::new(&p.from))?;
+        let to_resolved = self.sandbox.resolve(Path::new(&p.to))?;
+        if from_resolved.is_root || to_resolved.is_root {
+            return Err("ERR_FILES_IS_A_DIRECTORY: refusing to rename allowed root".into());
+        }
+        let from_meta = fs::symlink_metadata(&from_resolved.path).map_err(|e| not_found_or_io(&p.from, e))?;
+        let _ = from_meta;
+        if to_resolved.path.exists() && !p.overwrite {
+            return Err(format!("ERR_FILES_EXISTS: destination {} already exists (set overwrite=true)", p.to));
+        }
+        if let Some(parent) = to_resolved.path.parent() {
+            if !parent.is_dir() {
+                return Err(format!("ERR_FILES_NOT_FOUND: destination parent {} does not exist", parent.display()));
+            }
+        }
+        // If overwrite and destination exists, remove it first (file or dir)
+        if p.overwrite && to_resolved.path.exists() {
+            let m = fs::symlink_metadata(&to_resolved.path).map_err(|e| not_found_or_io(&p.to, e))?;
+            if m.is_dir() && !m.file_type().is_symlink() {
+                fs::remove_dir_all(&to_resolved.path).map_err(|e| write_io(&p.to, e))?;
+            } else {
+                fs::remove_file(&to_resolved.path).map_err(|e| write_io(&p.to, e))?;
+            }
+        }
+        fs::rename(&from_resolved.path, &to_resolved.path).map_err(|e| write_io(&format!("{} -> {}", p.from, p.to), e))?;
+        Ok(json!({"renamed": true, "from": from_resolved.path.display().to_string(), "to": to_resolved.path.display().to_string()}))
+    }
 }
 
 /// A single directory entry, classified via `lstat` so symlinks report their
@@ -286,6 +356,36 @@ fn create_parents_io(path: &str, e: std::io::Error) -> String {
 
 fn write_io(path: &str, e: std::io::Error) -> String {
     format!("ERR_FILES_IO: write failed on {path}: {e}")
+}
+
+fn trash_move(original: &Path, _meta: &Metadata) -> Result<(), String> {
+    let trash_base = std::env::var("XDG_DATA_HOME")
+        .ok()
+        .map(|p| Path::new(&p).join("Trash"))
+        .unwrap_or_else(|| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+            Path::new(&home).join(".local/share/Trash")
+        });
+    let files_dir = trash_base.join("files");
+    let info_dir = trash_base.join("info");
+    fs::create_dir_all(&files_dir).map_err(|e| format!("ERR_FILES_IO: cannot create trash files dir: {e}"))?;
+    fs::create_dir_all(&info_dir).map_err(|e| format!("ERR_FILES_IO: cannot create trash info dir: {e}"))?;
+    let file_name = original.file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
+    let mut dest = files_dir.join(file_name);
+    let mut counter = 0;
+    while dest.exists() {
+        counter += 1;
+        let new_name = format!("{file_name}.{counter}");
+        dest = files_dir.join(new_name);
+    }
+    fs::rename(original, &dest).map_err(|e| format!("ERR_FILES_IO: trash move failed: {e}"))?;
+    let info_name = dest.file_name().and_then(|n| n.to_str()).unwrap_or(file_name);
+    let info_path = info_dir.join(format!("{info_name}.trashinfo"));
+    let deletion_date = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S").to_string();
+    let original_str = original.display().to_string();
+    let info_content = format!("[Trash Info]\nPath={original_str}\nDeletionDate={deletion_date}\n");
+    fs::write(&info_path, info_content).map_err(|e| format!("ERR_FILES_IO: cannot write trashinfo: {e}"))?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -9,6 +9,9 @@ pub enum Request {
     List(ListParams),
     Read(ReadParams),
     Write(WriteParams),
+    Delete(DeleteParams),
+    Mkdir(MkdirParams),
+    Rename(RenameParams),
 }
 
 #[derive(Debug)]
@@ -29,6 +32,25 @@ pub struct WriteParams {
     pub path: String,
     pub bytes: Vec<u8>,
     pub create_parents: bool,
+}
+
+#[derive(Debug)]
+pub struct DeleteParams {
+    pub path: String,
+    pub to_trash: bool,
+}
+
+#[derive(Debug)]
+pub struct MkdirParams {
+    pub path: String,
+    pub parents: bool,
+}
+
+#[derive(Debug)]
+pub struct RenameParams {
+    pub from: String,
+    pub to: String,
+    pub overwrite: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -53,6 +75,27 @@ struct WriteRaw {
     content_base64: Option<String>,
     #[serde(default)]
     create_parents: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct DeleteRaw {
+    path: String,
+    to_trash: Option<bool>,
+}
+
+#[derive(serde::Deserialize)]
+struct MkdirRaw {
+    path: String,
+    #[serde(default)]
+    parents: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct RenameRaw {
+    from: String,
+    to: String,
+    #[serde(default)]
+    overwrite: bool,
 }
 
 fn require_nonempty_path(path: String, action: &str) -> Result<String, String> {
@@ -115,6 +158,34 @@ pub fn parse_request(action: &str, params_json: &[u8]) -> Result<Request, String
                 path,
                 bytes,
                 create_parents: p.create_parents,
+            }))
+        }
+        "fs_delete" => {
+            let p: DeleteRaw = serde_json::from_slice(params_json).map_err(|e| {
+                format!("ERR_FILES_BAD_PARAMS: invalid params for fs_delete, expected {{path, to_trash?}}: {e}")
+            })?;
+            Ok(Request::Delete(DeleteParams {
+                path: require_nonempty_path(p.path, "fs_delete")?,
+                to_trash: p.to_trash.unwrap_or(true),
+            }))
+        }
+        "fs_mkdir" => {
+            let p: MkdirRaw = serde_json::from_slice(params_json).map_err(|e| {
+                format!("ERR_FILES_BAD_PARAMS: invalid params for fs_mkdir, expected {{path, parents?}}: {e}")
+            })?;
+            Ok(Request::Mkdir(MkdirParams {
+                path: require_nonempty_path(p.path, "fs_mkdir")?,
+                parents: p.parents,
+            }))
+        }
+        "fs_rename" => {
+            let p: RenameRaw = serde_json::from_slice(params_json).map_err(|e| {
+                format!("ERR_FILES_BAD_PARAMS: invalid params for fs_rename, expected {{from, to, overwrite?}}: {e}")
+            })?;
+            Ok(Request::Rename(RenameParams {
+                from: require_nonempty_path(p.from, "fs_rename.from")?,
+                to: require_nonempty_path(p.to, "fs_rename.to")?,
+                overwrite: p.overwrite,
             }))
         }
         other => Err(format!("ERR_FILES_BAD_PARAMS: unknown action: {other}")),
