@@ -45,6 +45,7 @@ fn manifest() -> PluginManifest {
             "sound_play".to_string(),
             "sound_stop".to_string(),
             "sound_status".to_string(),
+            "sound_devices".to_string(),
         ],
         ..Default::default()
     }
@@ -133,6 +134,7 @@ async fn handle_action_request(app: &App, req: ActionRequest) -> ActionResponse 
             Ok(handler::handle_stop(&app.state, clip_id))
         }
         "sound_status" => Ok(handler::handle_status(&app.state)),
+        "sound_devices" => handler::handle_devices().await,
         other => {
             return ActionResponse {
                 action_id: req.action_id,

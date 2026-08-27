@@ -1,14 +1,19 @@
 {
   "plugin_id": "sound",
   "version": "0.1.0",
-  "permissions": ["audio"],
+  "permissions": [
+    "audio"
+  ],
   "kernel_compatibility_range": {
     "min": "0.1.0",
     "max": "*"
   },
   "binary": "sound",
   "events": [],
-  "files": ["sound", "plugin.json"],
+  "files": [
+    "sound",
+    "plugin.json"
+  ],
   "actions": [
     {
       "name": "sound_play",
@@ -16,23 +21,58 @@
       "input": {
         "type": "object",
         "properties": {
-          "file": { "type": "string", "description": "Absolute path to an audio file to play. Exactly one of `file` / `data_base64` is required." },
-          "data_base64": { "type": "string", "description": "Audio bytes, base64-encoded. Written to a temp file and played; deleted when playback ends. Requires `format`." },
-          "format": { "type": "string", "pattern": "^[a-z0-9]{1,8}$", "description": "Audio format/file extension for `data_base64` (wav, mp3, ogg, flac, ...). Ignored with `file`." },
-          "volume": { "type": "number", "minimum": 0, "maximum": 10, "description": "Linear volume multiplier, 1.0 = unchanged (default). Applied natively by pw-cat/paplay/ffplay; aplay ignores it." },
-          "device": { "type": "string", "minLength": 1, "description": "Output device/sink name. Applied by pw-cat (--target), paplay (--device), aplay (-D); ffplay ignores it." }
+          "file": {
+            "type": "string",
+            "description": "Absolute path to an audio file to play. Exactly one of `file` / `data_base64` is required."
+          },
+          "data_base64": {
+            "type": "string",
+            "description": "Audio bytes, base64-encoded. Written to a temp file and played; deleted when playback ends. Requires `format`."
+          },
+          "format": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{1,8}$",
+            "description": "Audio format/file extension for `data_base64` (wav, mp3, ogg, flac, ...). Ignored with `file`."
+          },
+          "volume": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Linear volume multiplier, 1.0 = unchanged (default). Applied natively by pw-cat/paplay/ffplay; aplay ignores it."
+          },
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Output device/sink name. Applied by pw-cat (--target), paplay (--device), aplay (-D); ffplay ignores it."
+          }
         },
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" },
-          "clip_id": { "type": "string", "description": "Handle for sound_stop (e.g. \"clip-3\")." },
-          "player": { "type": "string", "description": "Backend binary spawned (pw-cat / paplay / aplay / ffplay)." },
-          "replaced": { "type": "boolean", "description": "True when an existing clip was stopped to start this one (single owner of the speakers)." }
+          "ok": {
+            "type": "boolean"
+          },
+          "clip_id": {
+            "type": "string",
+            "description": "Handle for sound_stop (e.g. \"clip-3\")."
+          },
+          "player": {
+            "type": "string",
+            "description": "Backend binary spawned (pw-cat / paplay / aplay / ffplay)."
+          },
+          "replaced": {
+            "type": "boolean",
+            "description": "True when an existing clip was stopped to start this one (single owner of the speakers)."
+          }
         },
-        "required": ["ok", "clip_id", "player", "replaced"],
+        "required": [
+          "ok",
+          "clip_id",
+          "player",
+          "replaced"
+        ],
         "additionalProperties": false
       }
     },
@@ -42,7 +82,10 @@
       "input": {
         "type": "object",
         "properties": {
-          "clip_id": { "type": "string", "description": "Stop this clip specifically. Omit to stop everything currently playing." }
+          "clip_id": {
+            "type": "string",
+            "description": "Stop this clip specifically. Omit to stop everything currently playing."
+          }
         },
         "additionalProperties": false
       },
@@ -51,11 +94,15 @@
         "properties": {
           "stopped": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Ids of clips that were stopped. Empty when nothing matched (stopping is idempotent)."
           }
         },
-        "required": ["stopped"],
+        "required": [
+          "stopped"
+        ],
         "additionalProperties": false
       }
     },
@@ -75,18 +122,78 @@
             "items": {
               "type": "object",
               "properties": {
-                "id": { "type": "string" },
-                "source": { "type": "string", "description": "File path or \"inline/<format>\"." },
-                "player": { "type": "string" }
+                "id": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "File path or \"inline/<format>\"."
+                },
+                "player": {
+                  "type": "string"
+                }
               },
-              "required": ["id", "source", "player"],
+              "required": [
+                "id",
+                "source",
+                "player"
+              ],
               "additionalProperties": false
             },
             "description": "Currently playing clips."
           },
-          "count": { "type": "integer", "minimum": 0 }
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
-        "required": ["playing", "count"],
+        "required": [
+          "playing",
+          "count"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "sound_devices",
+      "permission": "audio",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "sinks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sinks",
+          "provider"
+        ],
         "additionalProperties": false
       }
     }
@@ -97,7 +204,12 @@
     "properties": {
       "SOUND_PLUGIN_PLAYER": {
         "type": "string",
-        "enum": ["pw-cat", "paplay", "aplay", "ffplay"],
+        "enum": [
+          "pw-cat",
+          "paplay",
+          "aplay",
+          "ffplay"
+        ],
         "description": "Pin one backend binary instead of auto-falling-through the chain."
       },
       "SOUND_PLUGIN_DEVICE": {
