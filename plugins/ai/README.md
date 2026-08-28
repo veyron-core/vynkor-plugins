@@ -1,6 +1,6 @@
 # ai plugin
 
-Provider-agnostic chat completion for Veyron plugins. Exposes one action,
+Provider-agnostic chat completion for Vynkor plugins. Exposes one action,
 `chat_completion`. Doesn't open its own sockets — every request is routed
 through the `network` plugin's `http_request` action, so `network` must
 also be registered and running. See `ROADMAP.md` for the full design

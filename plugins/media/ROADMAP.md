@@ -35,13 +35,13 @@ Remaining gaps → see `BUGS.md` (`BUG-1 Firefox seek still high`, `BUG-2 stale 
 
 - **Capability guards**: `CanPlay`/`CanPause`/`CanPlayPause`/`CanGoNext`/`CanGoPrevious`/`CanSeek`/`CanControl` checked before the call — explicit `false` → `ERR_MEDIA_NOT_SUPPORTED`; missing property never blocks (minimal players keep working).
 - **Error reclassification**: `classify_dbus` — `No such property` etc. now `ERR_MEDIA_NOT_SUPPORTED`, no longer misreported as `PLAYER_VANISHED` (the firefox Shuffle case).
-- **Signal watcher (full BUG-2 fix for compliant players)**: per-player background task subscribes `PropertiesChanged` + `Seeked(int64)` and feeds `POS_CACHE` `(pos, rate, updated_at)`; `extrapolate_position` trusts samples only within a 120s window (MPRIS needs no periodic Position updates). Watcher writes static caches only — single-reader rule on `VeyronClient` untouched.
+- **Signal watcher (full BUG-2 fix for compliant players)**: per-player background task subscribes `PropertiesChanged` + `Seeked(int64)` and feeds `POS_CACHE` `(pos, rate, updated_at)`; `extrapolate_position` trusts samples only within a 120s window (MPRIS needs no periodic Position updates). Watcher writes static caches only — single-reader rule on `VynkorClient` untouched.
 - **`media_seek_relative {offset_ms}`** — signed offset, clamps at 0, shares the absolute-seek core (`seek_absolute_on`) with `media_seek`.
 - **Negative tests**: empty/mixed/wrong-typed `xesam:artist`, `mpris:length` small-int variants + float/negative rejection, all guard paths, classification unit tests. 42 tests (was 14).
 
 Deferred from v1.1: publishing `media.state_changed` to the kernel event bus. It
 needs `PERMISSION_EVENT_PUBLISH` plus an outbound path from the watcher task;
-the SDK's sequential serve loop owns `VeyronClient` exclusively (single-reader
+the SDK's sequential serve loop owns `VynkorClient` exclusively (single-reader
 rule, `docs/PLUGIN_AUTHORING.md` §1), so events wait until the loop migration.
 
 ## v1.2 — loop migration + MPD/mpv hardening

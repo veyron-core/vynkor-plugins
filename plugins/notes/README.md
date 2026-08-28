@@ -86,7 +86,7 @@ Listing loads all note docs into memory (`db_keys` prefix scan +
 
 ## Concurrency architecture
 
-The serve loop owns the `VeyronClient` exclusively and is the single reader
+The serve loop owns the `VynkorClient` exclusively and is the single reader
 of the connection — no inbound frame is ever discarded. Each inbound
 `ActionRequest` is handled in a spawned task that reaches `database` through
 a channel-fronted RPC proxy ([`Rpc`] in `src/lib.rs`); replies and

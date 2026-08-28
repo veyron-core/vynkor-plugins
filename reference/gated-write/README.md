@@ -1,7 +1,7 @@
 # gated-write
 
 Reference high-risk plugin demonstrating the **D-09 confirmation gate** from
-the [Veyron Rust SDK](https://github.com/veyron-core/vynkor-sdk-rust).
+the [Vynkor Rust SDK](https://github.com/vynkor-core/vynkor-sdk-rust).
 
 The risky operation — writing a file into a configured data dir — is split
 into two actions:
@@ -48,18 +48,18 @@ curl -X POST http://host:8080/api/action \
 curl -X POST http://host:8080/api/action \
   -H "Authorization: Bearer <user-device-jwt>" \
   -d '{"action": "confirm_write", "params": {"pending_id": "pending-…"}}'
-# → {"path": "/var/lib/veyron/gated-write/notes.txt", "bytes_written": 11}
+# → {"path": "/var/lib/vyn/gated-write/notes.txt", "bytes_written": 11}
 ```
 
 With the SDK's one-liners:
 
 ```rust
-use veyron_sdk::confirmation_gate::{send_confirmation_request, send_confirmation};
+use vynkor_sdk::confirmation_gate::{send_confirmation_request, send_confirmation};
 
 let pending_id = send_confirmation_request(&mut client, "write", params).await?;
 let resp = send_confirmation(&mut client, "write", &pending_id).await?;
 ```
 
 The AI calling `confirm_write` gets `permission denied` (tested). See
-`src/main.rs` for the plugin wiring and `veyron-sdk`'s `confirmation_gate`
+`src/main.rs` for the plugin wiring and `vynkor-sdk`'s `confirmation_gate`
 module for the reusable helper.

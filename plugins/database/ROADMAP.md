@@ -34,7 +34,7 @@ only tracks what's deliberately deferred.
 
 ## Near-term follow-ups
 
-- Swap the local path-override `veyron-wire`/`veyron-sdk` dependencies (see
+- Swap the local path-override `vynkor-wire`/`vynkor-sdk` dependencies (see
   `Cargo.toml`) for published crates.io versions once the kernel changes in
   `docs/superpowers/plans/2026-07-17-database-plugin-kernel-support.md` are
   released.

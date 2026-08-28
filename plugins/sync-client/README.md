@@ -78,4 +78,4 @@ when the bridge relays subscriptions.
 v1. Depends on the host `sync` plugin being registered and running, and on
 kernel support for `PERMISSION_SCHEDULER` / `PERMISSION_IPC_SEND` +
 `ipc_targets` (T-04). The manifest declares the published requirements
-(`veyron-sdk = "0.1"`, `veyron-wire = "0.2"`), which resolve from crates.io.
+(`vynkor-sdk = "0.1"`, `vynkor-wire = "0.2"`), which resolve from crates.io.

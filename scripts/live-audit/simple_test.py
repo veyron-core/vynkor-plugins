@@ -1,6 +1,6 @@
 import asyncio, sys, os, json, time
 sys.path.insert(0, "/tmp/opencode/audit")
-from veyron_ws import VeyronWsClient
+from vynkor_ws import VynkorWsClient
 import hmac, hashlib, base64 as b
 
 SECRET = "audit-test-secret-0123456789abcdef0123456789abcdef"
@@ -31,8 +31,8 @@ TESTS = [
     ("calendar",   "event_list", {}, 10),
     ("secrets",    "secret_set", {"name": "x", "value": "v"}, 10),
     ("secrets",    "secret_get", {"name": "x"}, 10),
-    ("filesystem", "fs_write", {"path": "/tmp/veyron_audit.txt", "text": "hi"}, 10),
-    ("filesystem", "fs_read", {"path": "/tmp/veyron_audit.txt"}, 10),
+    ("filesystem", "fs_write", {"path": "/tmp/vyn_audit.txt", "text": "hi"}, 10),
+    ("filesystem", "fs_read", {"path": "/tmp/vyn_audit.txt"}, 10),
     ("filesystem", "fs_read", {"path": "/etc/shadow"}, 10),
     ("gated-write","request_write", {"path": "/tmp/opencode/audit/data/gw/t.txt", "content": "g"}, 10),
     ("sync",       "sync_set", {"key": "k", "value": {"n": 1}}, 10),
@@ -40,7 +40,7 @@ TESTS = [
     ("sync-client","sync_client_get_state", {}, 10),
     ("notify",     "notify_send", {"title": "audit", "message": "test from live kernel"}, 15),
     ("clipboard",  "clipboard_providers", {}, 30),
-    ("clipboard",  "clipboard_write", {"text": "veyron-audit"}, 60),
+    ("clipboard",  "clipboard_write", {"text": "vynkor-audit"}, 60),
     ("clipboard",  "clipboard_read", {}, 60),
     ("media",      "media_list_players", {}, 10),
     ("system",     "sys_info", {}, 10),
@@ -53,13 +53,13 @@ TESTS = [
     ("stt",        "stt_models", {"provider": "sherpa"}, 120),
     ("stt",        "stt_transcribe", {"provider": "sherpa",
         "audio_base64": __import__("base64").b64encode(
-            open("/home/behzod/projects/veyron-core/vynkor-plugins/models/stt/zipformer-ru-int8/test_wavs/0.wav","rb").read()).decode(),
+            open("/home/behzod/projects/vynkor-core/vynkor-plugins/models/stt/zipformer-ru-int8/test_wavs/0.wav","rb").read()).decode(),
         "format": "wav"}, 180),
 ]
 
 async def main():
     pid = f"client-{os.getpid()}"
-    c = VeyronWsClient("wss://127.0.0.1:8130/ws", mint(pid), SECRET, plugin_id=pid)
+    c = VynkorWsClient("wss://127.0.0.1:8130/ws", mint(pid), SECRET, plugin_id=pid)
     await c.connect()
     print(f"connected as {pid}\n")
     ok = fail = 0

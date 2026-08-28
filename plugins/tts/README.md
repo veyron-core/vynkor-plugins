@@ -1,6 +1,6 @@
 # tts plugin
 
-Text-to-speech for Veyron plugins. Exposes three actions: `tts_synthesize`
+Text-to-speech for Vynkor plugins. Exposes three actions: `tts_synthesize`
 (turn text into audio), `tts_voices` (list selectable voices), and
 `tts_speak` (stream Opus audio to a peer plugin — the D-12 voice
 pipeline's host-TTS → client-speaker leg).
@@ -61,7 +61,7 @@ Request (`ActionRequest.params_json`):
 ```json
 {
   "provider": "sherpa",
-  "text": "Hello from Veyron.",
+  "text": "Hello from Vynkor.",
   "voice": "af_heart",
   "format": "wav",
   "speed": 1.0

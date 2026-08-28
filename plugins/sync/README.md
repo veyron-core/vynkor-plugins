@@ -1,11 +1,11 @@
 # sync plugin
 
-Host-side versioned KV state store for Veyron plugins (SQLite-backed),
+Host-side versioned KV state store for Vynkor plugins (SQLite-backed),
 gated by `PERMISSION_STORAGE` and publishing a `sync.delta` event on every
 mutation (`PERMISSION_EVENT_PUBLISH`). This is the D-13 host side: clients
 pull a snapshot then subscribe to deltas; on reconnect they re-pull the
 snapshot. See `docs/REMOTE_DEVICES_PLAN.md` §11 ("Sync") and the D-13 task
-in `docs/REMOTE_DEVICES_ROADMAP.md` in the `veyron` (kernel) repo.
+in `docs/REMOTE_DEVICES_ROADMAP.md` in the `vynkor` (kernel) repo.
 
 Unlike `database`, there is **one shared store** — a single `sync.db` file
 under `data_dir` — not a per-caller namespace. Identity is still validated:
@@ -106,8 +106,8 @@ ceiling fails with `SQLITE_FULL`, no matter which action issued it.
 ## Concurrency
 
 Hot-path plugin, so it drives the SDK's concurrent message loop
-(`ConcurrentHandler` + `serve_concurrent`, `veyron-sdk` ≥ 0.1.4): one task
-owns the `VeyronClient` and `tokio::select!`s between inbound frames and an
+(`ConcurrentHandler` + `serve_concurrent`, `vynkor-sdk` ≥ 0.1.4): one task
+owns the `VynkorClient` and `tokio::select!`s between inbound frames and an
 mpsc channel of completed responses that spawned handler tasks push into.
 The client is never behind a lock, so a handler replying can't deadlock
 against the loop parked in `recv()`, and a panicking handler becomes an
@@ -121,7 +121,7 @@ back out of order — the kernel matches on `action_id`.
 
 v0.1. Depends on kernel support for `ActionRequest.caller_plugin_id`,
 `PERMISSION_STORAGE`, and `PERMISSION_EVENT_PUBLISH`. The manifest declares
-the published requirements (`veyron-sdk = "0.1"`, `veyron-wire = "0.2"`),
+the published requirements (`vynkor-sdk = "0.1"`, `vynkor-wire = "0.2"`),
 which resolve from crates.io. The client side (heartbeat publication,
 snapshot pull, delta subscription) is a separate `sync-client` plugin
 written against this exact contract.

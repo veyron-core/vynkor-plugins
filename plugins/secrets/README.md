@@ -1,6 +1,6 @@
 # secrets plugin
 
-Encrypted credential/API-key vault for Veyron plugins, gated by
+Encrypted credential/API-key vault for Vynkor plugins, gated by
 `PERMISSION_SECRETS`. One ChaCha20-Poly1305-encrypted vault file per calling
 plugin — callers cannot see, read, or overwrite each other's secrets.
 
@@ -21,7 +21,7 @@ granted the permission can read a value back.
 
 - Vault file: `{SECRETS_PLUGIN_DATA_DIR}/{caller_plugin_id}.vault`, created
   with mode `0600` on first write.
-- On-disk format: `magic "VEYRONVLT"` + version byte + 12-byte random nonce +
+- On-disk format: `magic "VYNKORVLT"` + version byte + 12-byte random nonce +
   ChaCha20-Poly1305 ciphertext of the JSON secrets map (the 16-byte AEAD tag
   is appended by the cipher). Every mutation re-encrypts the whole file.
 - Writes are atomic: temp file → fsync → rename → fsync dir. A torn write can
@@ -70,7 +70,7 @@ plugin). Copy `config.example.yaml` for the documented defaults.
 ## Concurrency
 
 Storage-class plugin on the hot path, so it drives the SDK's concurrent
-message loop (`ConcurrentHandler` + `serve_concurrent`, `veyron-sdk` ≥ 0.1.4)
+message loop (`ConcurrentHandler` + `serve_concurrent`, `vynkor-sdk` ≥ 0.1.4)
 exactly like `database`/`network`. Each caller's decrypted vault is cached
 behind a per-caller lock; every mutation re-encrypts and atomically persists
 that caller's file while holding its lock.
@@ -82,4 +82,4 @@ and already accepted by the kernel's `known_permissions()` probe; with the
 Manifest v2 per-action `permission: "secrets"`, the kernel enforces the gate
 data-driven (both caller and provider must hold `PERMISSION_SECRETS`) with
 no kernel change. The manifest declares the published requirements
-(`veyron-sdk = "0.1"`, `veyron-wire = "0.2"`), which resolve from crates.io.
+(`vynkor-sdk = "0.1"`, `vynkor-wire = "0.2"`), which resolve from crates.io.

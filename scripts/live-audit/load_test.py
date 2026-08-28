@@ -1,6 +1,6 @@
 import asyncio, os, sys, time, json
 sys.path.insert(0, "/tmp/opencode/audit")
-from veyron_ws import VeyronWsClient
+from vynkor_ws import VynkorWsClient
 import hmac, hashlib, base64 as b
 
 SECRET = "audit-test-secret-0123456789abcdef0123456789abcdef"
@@ -48,7 +48,7 @@ WATCH = {"vyn", "database", "network", "sync", "notes"}
 async def main():
     hz = os.sysconf("SC_CLK_TCK")
     pid = f"load-{os.getpid()}"
-    c = VeyronWsClient("wss://127.0.0.1:8130/ws", mint(pid), SECRET, plugin_id=pid)
+    c = VynkorWsClient("wss://127.0.0.1:8130/ws", mint(pid), SECRET, plugin_id=pid)
     await c.connect()
 
     t0 = time.perf_counter()

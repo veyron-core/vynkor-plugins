@@ -1,9 +1,9 @@
-"""Minimal Veyron WS client: register, call actions. Mirrors kernel integration-test protocol."""
+"""Minimal Vynkor WS client: register, call actions. Mirrors kernel integration-test protocol."""
 import asyncio, json, struct, zlib, hmac, hashlib, time, uuid
 import websockets
 import sys
-sys.path.insert(0, "/home/behzod/projects/veyron-core/vynkor-sdk-python")
-from veyron import veyron_protocol_pb2 as pb
+sys.path.insert(0, "/home/behzod/projects/vynkor-core/vynkor-sdk-python")
+from vynkor import vynkor_protocol_pb2 as pb
 
 MAGIC = 0x5652
 FLAG_MAC_PRESENT = 0x0001
@@ -11,11 +11,11 @@ FLAG_COMPRESSED = 0x0002
 
 
 def _derive_session_key(secret: bytes, nonce: bytes, plugin_id: str) -> bytes:
-    """HKDF-SHA256(salt=nonce, ikm=secret, info=b'veyron-frame-mac-v1|'+plugin_id) -> 32B"""
+    """HKDF-SHA256(salt=nonce, ikm=secret, info=b'vynkor-frame-mac-v1|'+plugin_id) -> 32B"""
     from cryptography.hazmat.primitives.kdf.hkdf import HKDF
     from cryptography.hazmat.primitives import hashes
     hk = HKDF(algorithm=hashes.SHA256(), length=32, salt=nonce,
-              info=b"veyron-frame-mac-v1|" + plugin_id.encode())
+              info=b"vynkor-frame-mac-v1|" + plugin_id.encode())
     return hk.derive(secret)
 
 
@@ -46,7 +46,7 @@ def _maybe_decompress(payload: bytes, flags: int) -> bytes:
     return payload
 
 
-class VeyronWsClient:
+class VynkorWsClient:
     def __init__(self, url: str, jwt: str, secret: str, plugin_id="audit-runner"):
         self.url, self.jwt, self.secret, self.plugin_id = url, jwt, secret, plugin_id
         self.key = None

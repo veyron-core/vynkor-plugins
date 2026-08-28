@@ -5,9 +5,9 @@ kernel.
 
 ## Naming: vynkor
 
-Veyron is being renamed **vynkor** ("veyron core" contracted) — the kernel
+Vynkor is being renamed **vynkor** ("vynkor core" contracted) — the kernel
 and every sibling repo, eventually. **New code and docs in this repo use
-`vynkor`**; keep "Veyron" only when referring to the historical name or a
+`vynkor`**; keep "Vynkor" only when referring to the historical name or a
 rename in progress. The `vyn` binary name stays `vyn`. Stable identifiers —
 `plugin_id` slugs, binary names, env-var names (`*_PLUGIN_*`), permission
 strings — are protocol/config surfaces and keep their current spellings

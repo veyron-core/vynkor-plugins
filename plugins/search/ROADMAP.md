@@ -9,7 +9,7 @@ HTTP routed through `network`'s gated `http_request`.
 
 `search` does **not** open its own sockets. It calls the kernel-routed
 `http_request` action (owned by the `network` plugin) via
-`VeyronClient::send_action` — the same helper `ai`/`tts`/`stt` use. Because
+`VynkorClient::send_action` — the same helper `ai`/`tts`/`stt` use. Because
 `http_request` is gated by `PERMISSION_NETWORK`, and the kernel's
 anti-laundering check (T-19) requires the *caller* to hold a gated action's
 permission as well as the provider, `search` declares

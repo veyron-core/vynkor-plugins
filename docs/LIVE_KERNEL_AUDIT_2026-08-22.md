@@ -18,8 +18,8 @@ builds, secured (JWT + frame-MAC), local Hyprland/Wayland desktop session.
 | Plugins | all 18 shipped, drop-in `plugins.d/*.yaml`, `sandbox: false` |
 | Desktop | Wayland (Hyprland), session D-Bus available to plugins |
 
-Registration requires, per plugin: `VEYRON_JWT_SECRET` (frame-MAC key
-derivation) and `VEYRON_JWT_TOKEN` minted with **`sub == plugin_id`** and
+Registration requires, per plugin: `VYN_JWT_SECRET` (frame-MAC key
+derivation) and `VYNKOR_JWT_TOKEN` minted with **`sub == plugin_id`** and
 the plugin's declared permissions — the supervisor injects neither; both go
 through each drop-in's `env:` list. Without them a plugin crash-loops
 silently until the restart budget runs out (see "Ops/DX findings").
@@ -93,7 +93,7 @@ bundled `piper-ru_RU-denis-medium` and `zipformer-ru-int8` models now return
 
 Payload is valid (`{"reply":"pong"}`) but `ActionStatus` arrives as 0 —
 consistent with pre-M9 enum numbering (`ACTION_OK` used to be 0; M9 made
-`*_UNKNOWN = 0`). Rebuild `ping-pong-rs` against current `veyron-wire`
+`*_UNKNOWN = 0`). Rebuild `ping-pong-rs` against current `vynkor-wire`
 and assert the status in its tests.
 
 **Fix** (`fix/live-audit-defects`): source already used
@@ -125,7 +125,7 @@ vyn 0.05 s, network 0.00 s. No growth, no leaks under burst.
 These cost the most audit time and are worth fixing in docs/tooling:
 
 1. **Secured-kernel plugin bootstrap is undocumented and silent-failing.**
-   The supervisor does not inject `VEYRON_JWT_SECRET` or a per-plugin JWT;
+   The supervisor does not inject `VYN_JWT_SECRET` or a per-plugin JWT;
    the operator must add both via drop-in `env:`. Failure mode: connect →
    register-reject → exit → restart loop, with an empty log ring buffer and
    nothing kernel-side at WARN. Deserves: README/docs coverage, a

@@ -34,7 +34,7 @@ policy, egress control, and observability live in one place.
   is now ignored (was a silent SSRF bypass before this was closed).
 - **Concurrent request loop + per-caller concurrency cap** — `main.rs`
   hand-rolls the same concurrent serve-loop pattern `database` uses (one
-  task owns the `VeyronClient`, spawned handlers reply via an mpsc
+  task owns the `VynkorClient`, spawned handlers reply via an mpsc
   channel), so multiple `http_request`s are genuinely in flight at once.
   `NETWORK_PLUGIN_MAX_INFLIGHT_PER_CALLER` (default 8, `0` = unlimited)
   rejects a caller's request once it has that many in flight, so one noisy
@@ -85,7 +85,7 @@ All buildable now. Status updated after implementation:
 - **`http_request_stream` action** — avoid full-body buffering for large
   downloads/uploads. Blocked on a chunked-action wire primitive.
 - **WebSocket support** — persistent bidirectional connections. Biggest
-  lift; needs its own design pass in `veyron-core` before any code here.
+  lift; needs its own design pass in `vynkor-core` before any code here.
 - **Kernel-enforced per-caller rate limits** — belt-and-suspenders on top of
   the near-term self-tracked concurrency cap above.
 

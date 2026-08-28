@@ -96,7 +96,7 @@ jobs:
 
       - name: Package and sign
         env:
-          VEYRON_SIGNING_KEY_HEX: ${{ secrets.SIGNING_KEY_HEX }}
+          VYNKOR_SIGNING_KEY_HEX: ${{ secrets.SIGNING_KEY_HEX }}
         run: |
           scripts/package.sh "$SLUG" "$NAME" "$DESC" \
             --category "$CATEGORY" --tags "$TAGS" --status "$STATUS"

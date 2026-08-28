@@ -201,7 +201,7 @@
   },
   "gated-write": {
     "name": "Gated Write",
-    "description": "Reference high-risk plugin demonstrating the **D-09 confirmation gate** from the [Veyron Rust SDK](https://github.com/veyron-core/vynkor-sdk-rust).",
+    "description": "Reference high-risk plugin demonstrating the **D-09 confirmation gate** from the [Vynkor Rust SDK](https://github.com/vynkor-core/vynkor-sdk-rust).",
     "category": "utility",
     "tags": [
       "stable"
@@ -449,7 +449,7 @@
   },
   "secrets": {
     "name": "Secrets",
-    "description": "Encrypted credential/API-key vault for Veyron plugins, gated by `PERMISSION_SECRETS`. One ChaCha20-Poly1305-encrypted vault file per calling plugin \u2014 callers cannot see, read, or overwrite each other's secrets.",
+    "description": "Encrypted credential/API-key vault for Vynkor plugins, gated by `PERMISSION_SECRETS`. One ChaCha20-Poly1305-encrypted vault file per calling plugin \u2014 callers cannot see, read, or overwrite each other's secrets.",
     "category": "utility",
     "tags": [
       "stable"
@@ -508,7 +508,7 @@
   },
   "sync": {
     "name": "Sync",
-    "description": "Host-side versioned KV state store for Veyron plugins (SQLite-backed), gated by `PERMISSION_STORAGE` and publishing a `sync.delta` event on every mutation (`PERMISSION_EVENT_PUBLISH`). This is the D-13 host side: clients pull a snapshot then subscribe to deltas; on reconnect they re-pull the snapshot. See `docs/REMOTE_DEVICES_PLAN.md` \u00a711 (\"Sync\") and the D-13 task in `docs/REMOTE_DEVICES_ROADMAP.md` in the `veyron` (kernel) repo.",
+    "description": "Host-side versioned KV state store for Vynkor plugins (SQLite-backed), gated by `PERMISSION_STORAGE` and publishing a `sync.delta` event on every mutation (`PERMISSION_EVENT_PUBLISH`). This is the D-13 host side: clients pull a snapshot then subscribe to deltas; on reconnect they re-pull the snapshot. See `docs/REMOTE_DEVICES_PLAN.md` \u00a711 (\"Sync\") and the D-13 task in `docs/REMOTE_DEVICES_ROADMAP.md` in the `vynkor` (kernel) repo.",
     "category": "utility",
     "tags": [
       "stable"
