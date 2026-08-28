@@ -11,7 +11,7 @@
 # v0.3: `ai` keeps a SQLite store (`<kernel data_dir>/plugins/ai/ai.db`)
 # with declared + auto-discovered models, agent profiles, and per-call token
 # usage. The kernel grants plugins a writable data dir automatically
-# (`VEYRON_DATA_DIR`) — no extra config needed.
+# (`VYN_DATA_DIR`) — no extra config needed.
 
 plugins:
   - id: ai

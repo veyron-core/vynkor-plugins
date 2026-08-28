@@ -1,6 +1,6 @@
 # tts plugin roadmap
 
-Goal: give any Veyron plugin a way to synthesize speech — one blessed
+Goal: give any Vynkor plugin a way to synthesize speech — one blessed
 path, provider quirks/auth/voice handling in one place instead of every
 plugin rolling its own client. Local-first: a fully offline engine is the
 default, cloud providers are opt-in additions behind the same interface.
@@ -12,7 +12,7 @@ Two halves, two different mechanics:
 - **Cloud providers (`openai`, `elevenlabs`)** do **not** open their own
   sockets and declare no `PERMISSION_NETWORK`. They call the
   kernel-routed `http_request` action (owned by the `network` plugin) via
-  `VeyronClient::send_action` — identical to `ai`. SSRF blocklist,
+  `VynkorClient::send_action` — identical to `ai`. SSRF blocklist,
   redirect handling, retry-backoff and response size caps in `network`
   apply for free; `tts`'s `plugin.json` has `"permissions": []`.
 - **Local provider (`sherpa`)** opens no sockets at all. It links
@@ -41,7 +41,7 @@ the "one blessed path per capability" convention.
   ```json
   {
     "provider": "sherpa",
-    "text": "Hello from Veyron.",
+    "text": "Hello from Vynkor.",
     "voice": "af_heart",
     "format": "wav",
     "speed": 1.0
@@ -84,7 +84,7 @@ plugins/tts/
   plugin.json          # permissions: [], actions: ["tts_synthesize","tts_voices"]
   src/
     main.rs             # custom serve loop (same rationale as ai: the SDK
-                        # Plugin::run can't hand out a VeyronClient)
+                        # Plugin::run can't hand out a VynkorClient)
     request.rs           # parse_request: validate SynthesizeParams
     provider/
       mod.rs               # Provider trait (cloud), AudioResult, VoiceInfo,
@@ -162,7 +162,7 @@ parsing. sherpa config assembly tested without loading a real model.
 
 - **Streaming action support (R6-02)** — real audio streaming to the
   caller instead of buffer-then-reply. Same `ActionStreamChunk` blocker
-  as `ai`/`network` — see `veyron/ROADMAP.md` R6-02.
+  as `ai`/`network` — see `vynkor/ROADMAP.md` R6-02.
 - **`tts.synthesis_done` events (R6-01)** — publish duration/format/voice
   to the event bus for observability, same plugin → event-bus publish
   path blocker as `ai` (R6-01).

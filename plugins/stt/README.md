@@ -1,6 +1,6 @@
 # stt plugin
 
-Speech-to-text for Veyron plugins. Exposes four actions: `stt_transcribe`
+Speech-to-text for Vynkor plugins. Exposes four actions: `stt_transcribe`
 (turn audio into text), `stt_models` (list transcribable models), and
 `stt_listen_start`/`stt_listen_stop` (stream PCM in, get a transcript out
 as an event — the D-12 voice pipeline's client-STT → host-text leg).
@@ -87,7 +87,7 @@ providers:
 
 ```json
 {
-  "text": "Hello from Veyron.",
+  "text": "Hello from Vynkor.",
   "language": "en",
   "duration_seconds": 2.4,
   "model": "sherpa:transducer"

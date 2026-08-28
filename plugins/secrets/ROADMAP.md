@@ -10,7 +10,7 @@ gate live in one place.
 - **Encrypted per-caller vaults** — one ChaCha20-Poly1305 vault file per
   kernel-stamped `caller_plugin_id` (`{SECRETS_PLUGIN_DATA_DIR}/{caller_id}.vault`),
   created `0600`, never shared, never a default namespace.
-- **On-disk format** — `magic "VEYRONVLT"` + version byte + 12-byte nonce +
+- **On-disk format** — `magic "VYNKORVLT"` + version byte + 12-byte nonce +
   AEAD ciphertext of the JSON secrets map; re-encrypted wholesale on every
   mutation.
 - **Atomic writes** — temp file → fsync → rename → fsync dir. A torn write
@@ -26,9 +26,9 @@ gate live in one place.
 - **Size caps reject, never truncate** — name ≤ 256 B, value ≤ 256 KiB,
   name charset `[a-zA-Z0-9_.-]`.
 - **Concurrent handler** — SDK `ConcurrentHandler` + `serve_concurrent`
-  (veyron-sdk ≥ 0.1.4), per-caller vault cached behind a lock, same pattern
+  (vynkor-sdk ≥ 0.1.4), per-caller vault cached behind a lock, same pattern
   as `database`/`network`.
-- **Verified against the live kernel** — `veyron/tests/integration/
+- **Verified against the live kernel** — `vynkor/tests/integration/
   test_secrets_plugin.rs` spawns the real binary against an in-process
   kernel: round-trip `secret_set`/`secret_get` over the real UDS wire,
   no-plaintext-in-vault assertion, and `ACTION_PERMISSION_DENY` for a caller

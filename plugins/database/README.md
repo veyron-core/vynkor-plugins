@@ -1,6 +1,6 @@
 # database plugin
 
-Per-caller-namespaced KV + raw SQL storage for Veyron plugins, gated by
+Per-caller-namespaced KV + raw SQL storage for Vynkor plugins, gated by
 `PERMISSION_STORAGE`. One SQLite file per calling plugin — callers cannot
 see or query each other's data. See
 `docs/superpowers/specs/2026-07-15-database-plugin-design.md` for the full
@@ -101,8 +101,8 @@ pages are reused for subsequent writes.
 
 Unlike `ai`/`tts`/`stt` (sequential `Plugin::run`), this is a hot-path
 plugin, so it drives the SDK's concurrent message loop
-(`ConcurrentHandler` + `serve_concurrent`, `veyron-sdk` ≥ 0.1.4): one task
-owns the `VeyronClient` and `tokio::select!`s between inbound frames and an
+(`ConcurrentHandler` + `serve_concurrent`, `vynkor-sdk` ≥ 0.1.4): one task
+owns the `VynkorClient` and `tokio::select!`s between inbound frames and an
 mpsc channel of completed responses that spawned handler tasks push into.
 The client is never behind a lock, so a handler replying can't deadlock
 against the loop parked in `recv()`, and a panicking handler becomes an
@@ -115,5 +115,5 @@ back out of order — the kernel matches on `action_id`.
 v1. Depends on kernel support for `ActionRequest.caller_plugin_id` and
 `PERMISSION_STORAGE` (see
 `docs/superpowers/plans/2026-07-17-database-plugin-kernel-support.md` in the
-`veyron` repo). The manifest declares the published requirements
-(`veyron-sdk = "0.1"`, `veyron-wire = "0.2"`), which resolve from crates.io.
+`vynkor` repo). The manifest declares the published requirements
+(`vynkor-sdk = "0.1"`, `vynkor-wire = "0.2"`), which resolve from crates.io.

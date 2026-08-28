@@ -415,7 +415,7 @@ passthrough (see ROADMAP non-goals).
 
 Since v0.3 the plugin keeps a SQLite store (`<kernel data_dir>/plugins/ai/ai.db`)
 with models, agent profiles and per-call token usage. The kernel grants the
-plugin a writable data dir automatically (`VEYRON_DATA_DIR`).
+plugin a writable data dir automatically (`VYN_DATA_DIR`).
 
 **Model resolution.** `chat_completion` can name a **model id** or an
 **agent id** instead of the legacy provider/base_url/api_key_env triple. The

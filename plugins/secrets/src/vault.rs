@@ -3,7 +3,7 @@
 //! On-disk layout (one vault file per caller):
 //!
 //! ```text
-//! 0..9    magic   b"VEYRONVLT"
+//! 0..9    magic   b"VYNKORVLT"
 //! 9       version u8 = 1
 //! 10..22  nonce   [u8; 12]
 //! 22..    payload ChaCha20-Poly1305 ciphertext of the secrets JSON map
@@ -30,8 +30,8 @@ use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use zeroize::Zeroizing;
 
-/// File magic, ASCII "VEYRONVLT".
-pub const MAGIC: &[u8; 9] = b"VEYRONVLT";
+/// File magic, ASCII "VYNKORVLT".
+pub const MAGIC: &[u8; 9] = b"VYNKORVLT";
 /// Current vault file version.
 pub const VERSION: u8 = 1;
 const NONCE_LEN: usize = 12;
@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn rejects_short_input() {
-        assert!(decrypt(b"VEYRONVLT", &test_key()).is_err());
+        assert!(decrypt(b"VYNKORVLT", &test_key()).is_err());
     }
 
     #[test]

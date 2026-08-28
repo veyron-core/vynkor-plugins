@@ -8,8 +8,8 @@ archives are rebuilt — after asserting every published zip still hashes to
 its stored sha256. Nothing is written unless every entry signs cleanly.
 
 Usage:
-  VEYRON_SIGNING_KEY_HEX=<64-hex seed> scripts/resign.py          # re-sign
-  VEYRON_SIGNING_KEY_FILE=<path> scripts/resign.py                # re-sign
+  VYNKOR_SIGNING_KEY_HEX=<64-hex seed> scripts/resign.py          # re-sign
+  VYNKOR_SIGNING_KEY_FILE=<path> scripts/resign.py                # re-sign
   scripts/resign.py --check                                       # verify only
 
 --check verifies existing signatures against the pinned maintainer public
@@ -41,13 +41,13 @@ def fail(msg: str) -> None:
 
 
 def load_key() -> Ed25519PrivateKey:
-    hex_seed = os.environ.get("VEYRON_SIGNING_KEY_HEX", "")
+    hex_seed = os.environ.get("VYNKOR_SIGNING_KEY_HEX", "")
     if not hex_seed:
-        key_file = os.environ.get("VEYRON_SIGNING_KEY_FILE", "")
+        key_file = os.environ.get("VYNKOR_SIGNING_KEY_FILE", "")
         if not key_file:
             fail(
-                "no signing key configured — set VEYRON_SIGNING_KEY_HEX "
-                "or VEYRON_SIGNING_KEY_FILE (or run with --check)"
+                "no signing key configured — set VYNKOR_SIGNING_KEY_HEX "
+                "or VYNKOR_SIGNING_KEY_FILE (or run with --check)"
             )
         hex_seed = "".join(Path(key_file).read_text().split())
     hex_seed = "".join(hex_seed.split())

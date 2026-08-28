@@ -1,6 +1,6 @@
 # ai plugin roadmap
 
-Goal: give any Veyron plugin a way to call an LLM (Claude/OpenAI/etc) via a
+Goal: give any Vynkor plugin a way to call an LLM (Claude/OpenAI/etc) via a
 dedicated `ai` plugin, same pattern as `network` for HTTP — one blessed path,
 provider quirks/auth/retries live in one place instead of every plugin
 rolling its own client.
@@ -9,7 +9,7 @@ rolling its own client.
 
 `ai` plugin does **not** open its own sockets. It calls the kernel-routed
 `http_request` action (owned by the `network` plugin) via
-`VeyronClient::send_action` — the same helper `network`'s own callers would
+`VynkorClient::send_action` — the same helper `network`'s own callers would
 use. Because `http_request` is gated by `PERMISSION_NETWORK`, and the
 kernel's anti-laundering check (T-19) requires the *caller* to hold a gated
 action's permission as well as the provider, `ai` declares
@@ -20,7 +20,7 @@ response size caps in `network` apply for free.
 
 (Historical note: the first draft of this section claimed the kernel checks
 only the *provider's* permission and `ai` could declare none — that predates
-T-19's requester-side check, landed in `veyron` as
+T-19's requester-side check, landed in `vynkor` as
 `fix: require requester permission for gated actions, not just provider`.)
 
 Practical effect: `ai`'s `plugin.json` has `"permissions": ["network"]` —
@@ -90,12 +90,12 @@ plugins/ai/
 ```
 
 **Custom serve loop, not `Plugin::run`.** The SDK's `Plugin::on_message` only
-gets `&mut self`, not `&mut VeyronClient` — confirmed against the kernel
-(`veyron/src/plugins/registry.rs:86-98`, `veyron/src/ipc/protocol.rs:239`)
+gets `&mut self`, not `&mut VynkorClient` — confirmed against the kernel
+(`vynkor/src/plugins/registry.rs:86-98`, `vynkor/src/ipc/protocol.rs:239`)
 that a plugin cannot open a second connection under the same `plugin_id`
 (registration rejected) nor send `ActionRequest`s over an unregistered
 connection (routing rejected). So there is no way to get a second
-`VeyronClient` for the outbound `send_action` call into `network`. `ai`'s
+`VynkorClient` for the outbound `send_action` call into `network`. `ai`'s
 `main.rs` implements its own loop — near-identical to the SDK's `serve()`
 (ping/pong, event ack, shutdown) — but calls the handler with `&mut client`
 in hand. Sequential, one request at a time, same model as `network` and
@@ -179,7 +179,7 @@ against fixture JSON, no live network — the actual send is `network`'s job),
 - **Streaming responses** — provider APIs support SSE token streaming;
    today's model is one `ActionRequest` → one `ActionResponse`, so v1 has to
    buffer the full completion before replying. Fine for v1, revisit once
-   R6-02 (`ActionStreamChunk`, see `veyron/ROADMAP.md`) lands in the kernel.
+   R6-02 (`ActionStreamChunk`, see `vynkor/ROADMAP.md`) lands in the kernel.
 - **Token/cost accounting** — log `usage` fields per call; no event bus
   path yet (see below), so stdout JSON logging like `network` does today.
 
@@ -188,11 +188,11 @@ against fixture JSON, no live network — the actual send is `network`'s job),
 - **Streaming action support (R6-02)** — real token-by-token streaming to
   the caller instead of buffer-then-reply. Blocked on the same
   `ActionStreamChunk` (or raw-channel) primitive `network`'s
-  `http_request_stream` follow-up needs — see `veyron/ROADMAP.md` R6-02.
+  `http_request_stream` follow-up needs — see `vynkor/ROADMAP.md` R6-02.
 - **`ai.completion_done` events (R6-01)** — publish usage/latency/model to
   the event bus for observability, same blocker as `network`'s
   `network.request_completed` (plugin → event-bus publish path, R6-01,
-  design doc already exists: `veyron/docs/superpowers/specs/2026-07-06-plugin-event-publish-design.md`).
+  design doc already exists: `vynkor/docs/superpowers/specs/2026-07-06-plugin-event-publish-design.md`).
 - **Per-caller quotas (R6-03)** — if `ai` becomes a shared resource for many
   plugins, same open question as `network`'s per-caller concurrency cap:
   `ActionRequest` has no caller-id field to key on yet.
@@ -201,7 +201,7 @@ against fixture JSON, no live network — the actual send is `network`'s job),
 
 - No kernel special-casing for "AI" — manifesto is zero-AI in the kernel
   core, and `PERMISSION_AI`/`needs_ai` were already tried and retired
-  (`reserved` in `veyron_protocol.proto`). `ai` is an ordinary plugin like
+  (`reserved` in `vynkor_protocol.proto`). `ai` is an ordinary plugin like
   any other.
 - Tool-use / function-calling passthrough — v2, once basic chat completion
   is solid.

@@ -132,7 +132,7 @@ next occurrence proceeds normally.
 
 ## Concurrency architecture
 
-The serve loop owns the `VeyronClient` exclusively and is the single reader
+The serve loop owns the `VynkorClient` exclusively and is the single reader
 of the connection — no inbound frame is ever discarded. Action handlers AND
 the periodic scan run as spawned tasks communicating through a channel-fronted
 RPC proxy ([`Rpc`] in `src/lib.rs`) plus an outbound channel for replies and

@@ -27,8 +27,8 @@ plugins:
                                        # If spawn is blocked under the sandbox, set sandbox: false.
     env:
       # Optional: default app name shown by notify-send when a request
-      # omits app_name. Default: veyron.
-      # - NOTIFY_PLUGIN_APP_NAME=veyron
+      # omits app_name. Default: vynkor.
+      # - NOTIFY_PLUGIN_APP_NAME=vynkor
       # Optional: comma-separated list of enabled providers
       # (notify-send, wall, espeak). Empty/unset = all enabled. A provider
       # not on the list is rejected at call time; an unknown id here makes
@@ -39,7 +39,7 @@ plugins:
       # Normal deliveries work without it — the inbox audit entry is just
       # skipped. Notifications are stored as plaintext JSON at
       # $NOTIFY_PLUGIN_DATA_DIR/inbox.json (atomic writes, mode 0600).
-      # - NOTIFY_PLUGIN_DATA_DIR=/var/lib/veyron/notify
+      # - NOTIFY_PLUGIN_DATA_DIR=/var/lib/vyn/notify
       # --- speak: true (tts озвучка, best-effort) --------------------------
       # speak requires the `tts` plugin to be registered and running, with
       # its own provider/model config in place (see plugins/tts/). Its

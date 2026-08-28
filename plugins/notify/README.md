@@ -58,7 +58,7 @@ Request (`ActionRequest.params_json`):
 - `timeout_ms` — optional, `1..=600000` ms (`0` leaves the provider
   default). Only sent to `notify-send`.
 - `app_name` — optional notify-send app name; defaults to
-  `NOTIFY_PLUGIN_APP_NAME`, then `veyron`.
+  `NOTIFY_PLUGIN_APP_NAME`, then `vynkor`.
 - `silent` — optional, default `false`. Store only, no delivery — see
   "Silent notifications & the inbox".
 - `speak` — optional, default `false`. Also synthesize the text through
@@ -216,7 +216,7 @@ its binary is installed (`espeak`: `espeak-ng` **or** `espeak` present).
 set in the kernel's `config.yaml`, under this plugin's `env:` list — see
 `config.example.yaml` in this directory.
 
-- `NOTIFY_PLUGIN_APP_NAME` — optional, default `veyron`. Default app name
+- `NOTIFY_PLUGIN_APP_NAME` — optional, default `vynkor`. Default app name
   for `notify-send` when a request omits `app_name`.
 - `NOTIFY_PLUGIN_ENABLED_PROVIDERS` — optional, comma-separated list of
   enabled providers (`notify-send,wall,espeak`). Empty/unset = all enabled.

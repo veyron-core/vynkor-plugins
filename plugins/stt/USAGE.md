@@ -62,7 +62,7 @@ Optional:
 
 ```json
 {
-  "text": "Hello from Veyron.",
+  "text": "Hello from Vynkor.",
   "language": "en",
   "duration_seconds": 2.4,
   "model": "whisper-1"

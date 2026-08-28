@@ -1,5 +1,5 @@
 # sync plugin config. Copy to config.yaml and set data_dir before running.
-data_dir: /var/lib/veyron/sync            # required, directory holding sync.db
+data_dir: /var/lib/vyn/sync            # required, directory holding sync.db
 pool_size: 4                              # connections in the SQLite pool
 busy_timeout_ms: 5000                     # SQLite busy timeout
 max_value_bytes: 1048576                  # 1 MiB, sync_set value size cap

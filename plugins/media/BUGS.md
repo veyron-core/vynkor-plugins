@@ -63,7 +63,7 @@
 
 - **Scope:** signal watcher (`spawn_watch_task` / `run_watch`) + `POS_CACHE` + window-capped `extrapolate_position`
 - **Fix:** one watcher task per MPRIS player subscribes `org.freedesktop.DBus.Properties.PropertiesChanged` on `Player` and the `Seeked(int64)` signal, feeding `(pos, rate, updated_at)` into `POS_CACHE` via `cache_note`. `extrapolate_position` now trusts a cached sample only within `EXTRAPOLATION_MAX_AGE_MS` (120s) — MPRIS does not require periodic Position updates, so older samples are ignored. Works fully for compliant players (mpd verified pattern); Firefox stays limited by BUG-1 upstream (`raw_pos` never becomes >0 there).
-- **Event publication deferred:** `media.state_changed` needs `PERMISSION_EVENT_PUBLISH` + an outbound path from the watcher task; the SDK's simple sequential loop owns `VeyronClient` exclusively (single-reader rule, see `docs/PLUGIN_AUTHORING.md` §1). Deferred until media migrates to the calendar-style select loop (see ROADMAP v1.2). The watcher only ever writes static caches, so it is single-reader-safe today.
+- **Event publication deferred:** `media.state_changed` needs `PERMISSION_EVENT_PUBLISH` + an outbound path from the watcher task; the SDK's simple sequential loop owns `VynkorClient` exclusively (single-reader rule, see `docs/PLUGIN_AUTHORING.md` §1). Deferred until media migrates to the calendar-style select loop (see ROADMAP v1.2). The watcher only ever writes static caches, so it is single-reader-safe today.
 
 ### FIXED — capability guards + error reclassification
 

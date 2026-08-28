@@ -40,8 +40,8 @@
 #   (dep -> version range, default ">=0.0.0").
 #
 # Signing (optional):
-#   VEYRON_SIGNING_KEY_HEX   64-hex-char Ed25519 seed (32 bytes)
-#   VEYRON_SIGNING_KEY_FILE  path to a file containing that 64-hex-char seed
+#   VYNKOR_SIGNING_KEY_HEX   64-hex-char Ed25519 seed (32 bytes)
+#   VYNKOR_SIGNING_KEY_FILE  path to a file containing that 64-hex-char seed
 #   If either is set, the archive is signed over the ASCII message
 #   "<slug>:<version>:<sha256>:<status>:<archive_url>:<min_kernel_version>:
 #   <max_kernel_version>" (the S1 canonical form verified by
@@ -210,10 +210,10 @@ source_url="https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/$plu
 
 # ---- signing (optional) ----------------------------------------------------
 seed=""
-if [[ -n "${VEYRON_SIGNING_KEY_HEX:-}" ]]; then
-    seed="$VEYRON_SIGNING_KEY_HEX"
-elif [[ -n "${VEYRON_SIGNING_KEY_FILE:-}" ]]; then
-    seed="$(tr -d '[:space:]' < "$VEYRON_SIGNING_KEY_FILE")"
+if [[ -n "${VYNKOR_SIGNING_KEY_HEX:-}" ]]; then
+    seed="$VYNKOR_SIGNING_KEY_HEX"
+elif [[ -n "${VYNKOR_SIGNING_KEY_FILE:-}" ]]; then
+    seed="$(tr -d '[:space:]' < "$VYNKOR_SIGNING_KEY_FILE")"
 fi
 
 signature=""
@@ -264,7 +264,7 @@ PYEOF
 )
     printf '%s\n' "$signature" > "$version_dir/signature.sig"
 else
-    echo "warning: no signing key configured (VEYRON_SIGNING_KEY_HEX / VEYRON_SIGNING_KEY_FILE) — entry will have an empty signature; vynm install will reject it until signed" >&2
+    echo "warning: no signing key configured (VYNKOR_SIGNING_KEY_HEX / VYNKOR_SIGNING_KEY_FILE) — entry will have an empty signature; vynm install will reject it until signed" >&2
     rm -f "$version_dir/signature.sig"
 fi
 

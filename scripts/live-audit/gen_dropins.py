@@ -2,10 +2,10 @@
 import os, json, time, hmac, hashlib, base64
 
 JWT_SECRET = "audit-test-secret-0123456789abcdef0123456789abcdef"
-PLUGINS = "/home/behzod/projects/veyron-core/vynkor-plugins/plugins"
+PLUGINS = "/home/behzod/projects/vynkor-core/vynkor-plugins/plugins"
 OUT = "/tmp/opencode/audit/plugins.d"
 DATA = "/tmp/opencode/audit/data"
-MODELS = "/home/behzod/projects/veyron-core/vynkor-plugins/models"
+MODELS = "/home/behzod/projects/vynkor-core/vynkor-plugins/models"
 
 
 def b64u(b):

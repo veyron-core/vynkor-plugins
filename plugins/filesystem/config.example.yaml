@@ -11,7 +11,7 @@ env:
   # paths the plugin is allowed to touch. Unset/empty = deny-all: every
   # action fails with ERR_FILES_NO_ROOTS. Relative and nonexistent roots are
   # skipped at startup with a loud log line.
-  FILES_PLUGIN_ALLOWED_ROOTS: /var/lib/veyron/files,/home/user/Documents
+  FILES_PLUGIN_ALLOWED_ROOTS: /var/lib/vyn/files,/home/user/Documents
 
   # Cap on fs_list entries (default 1000); listings past this are truncated.
   FILES_PLUGIN_MAX_LIST_ENTRIES: "1000"

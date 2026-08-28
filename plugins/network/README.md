@@ -1,6 +1,6 @@
 # network plugin
 
-Outbound HTTP for Veyron plugins/kernel. Exposes two actions:
+Outbound HTTP for Vynkor plugins/kernel. Exposes two actions:
 `http_request` (guarded by `PERMISSION_NETWORK`) and `network_stats`
 (per-caller request/error/latency counters). See
 `docs/superpowers/specs/2026-07-05-network-plugin-design.md` for the full

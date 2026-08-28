@@ -1,6 +1,6 @@
 # stt plugin roadmap
 
-Goal: give any Veyron plugin a way to transcribe audio — one blessed
+Goal: give any Vynkor plugin a way to transcribe audio — one blessed
 path, provider quirks/auth/model handling in one place instead of every
 plugin rolling its own client. Local-first: a fully offline engine is the
 default, the cloud provider is an opt-in addition behind the same
@@ -13,7 +13,7 @@ Two halves, two different mechanics:
 - **Cloud provider (`openai`)** does **not** open its own sockets and
   declares no `PERMISSION_NETWORK`. It calls the kernel-routed
   `http_request` action (owned by the `network` plugin) via
-  `VeyronClient::send_action` — identical to `ai` and `tts`. SSRF
+  `VynkorClient::send_action` — identical to `ai` and `tts`. SSRF
   blocklist, redirect handling, retry-backoff and response size caps in
   `network` apply for free; `stt`'s `plugin.json` has `"permissions": []`.
 - **Local provider (`sherpa`)** opens no sockets at all. It links

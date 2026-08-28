@@ -1,8 +1,8 @@
-# veyron-plugins roadmap
+# vynkor-plugins roadmap
 
-> **Naming:** Veyron is being renamed **vynkor** ("veyron core") — the
+> **Naming:** Vynkor is being renamed **vynkor** ("vynkor core") — the
 > kernel and all sibling repos, eventually. New code and docs written from
-> now on use **vynkor**; "Veyron" remains only for the historical name or
+> now on use **vynkor**; "Vynkor" remains only for the historical name or
 > in-flight renames. Stable identifiers (`plugin_id` slugs, binary names,
 > `*_PLUGIN_*` env vars, permission strings) keep their current spellings —
 > they are protocol/config surfaces, not prose. The `vyn` binary stays
@@ -69,7 +69,7 @@ Dependency order — each row can start once everything in "depends on" ships.
 | `metrics` | periodic host samples (CPU/RAM/disk/battery/network) into own SQLite + range/query API for webclient graphs; timer loop like calendar's reminder scan, own storage file like vector-db's backend | — | `PERMISSION_STORAGE` (existing) |
 | `window` | list/focus/switch/minimize/maximize open windows | — | `PERMISSION_SYSTEM` (existing, shares scope with `system`) |
 | `home` | home automation over a custom protocol to bare-metal devices (ESP32/Arduino) — not Home Assistant/MQTT, own wire format | `network` (or serial/BLE transport, TBD) | `PERMISSION_HOME` (defined, proto v1.4) |
-| `browser` | read/control active browser tab (url/title/DOM/screenshot) — native-messaging host (the actual plugin, built on `veyron-sdk-rust`) + a browser extension (Chrome/Firefox) as the tab-access side | — | `PERMISSION_BROWSER` (existing, unused today) |
+| `browser` | read/control active browser tab (url/title/DOM/screenshot) — native-messaging host (the actual plugin, built on `vynkor-sdk-rust`) + a browser extension (Chrome/Firefox) as the tab-access side | — | `PERMISSION_BROWSER` (existing, unused today) |
 | `cloud-sync` | remote snapshot transport for D-13 `sync` state — S3/WebDAV/rsync.net via `network`'s gated `http_request`; the host↔remote leg that `sync`/`sync-client` leave host-local (timer pull/push, conflict wins host) | `sync`, `network`, `secrets` (remote creds) | `PERMISSION_NETWORK` (caller of gated `http_request`), `PERMISSION_SECRETS` |
 | `agent` | `plugins/agent/` | — | multi-step goal loop: `ai` chat + tool-call dispatch to other plugins' actions, state persisted. **Shipped** (v0.1.0, see the Shipped table) — tool discovery runs over new kernel read-only commands (`list_plugins` + `get_manifest` exemption from `PERMISSION_KERNEL_ADMIN`, see "Kernel-side changes needed") | `ai`, `database` | storage, event_publish (+ operator JWT grant for dispatched actions) |
 | `webclient` | browser chat UI + mic voice input/TTS playback, talks to kernel WS API | `agent` (Kairo), `stt`, `tts` | none itself — client only, auth via kernel JWT |
@@ -124,7 +124,7 @@ can puppet the body too. Senses and effectors are never reimplemented
 in-process — voice is `stt`/`tts`, attention is `window` + `capture`,
 media is `media`, app launching is `launcher` — the same split earlier
 X11-hack prototypes did by hand, now behind permissions. Implementation
-sketch: a `veyron-sdk-rust` plugin process hosting the Wayland renderer
+sketch: a `vynkor-sdk-rust` plugin process hosting the Wayland renderer
 itself (software sprite rasterizer; precedent for touching the desktop
 session from a plugin process is `media` on session D-Bus); if supervisor
 coupling to a GUI-bearing process proves annoying, split into a headless
@@ -164,17 +164,17 @@ browser/profile/logged-in sessions, no `--remote-debugging-port` launch
 flag, permissions surfaced through the browser's own extension-permission
 UI. Extensions can't open a UDS socket directly, so the plugin has two
 halves: a native-messaging host (stdio, spawned by the browser, this is the
-real `veyron-sdk-rust` plugin talking to the kernel) and the extension
+real `vynkor-sdk-rust` plugin talking to the kernel) and the extension
 itself (JS, `tabs`/`scripting` permissions) relaying over
 `chrome.runtime.connectNative`.
 
 ## Concurrency model for hot-path plugins
 
-**Shipped** (SDK `veyron-sdk` 0.1.4, `feat/concurrent-serve-loop`).
+**Shipped** (SDK `vynkor-sdk` 0.1.4, `feat/concurrent-serve-loop`).
 
 The kernel protocol already supports multiple in-flight `ActionRequest`s per
 plugin connection — `action_id` is the correlation key end-to-end (see
-`ActionRequest`/`ActionResponse` in `wire/proto/veyron_protocol.proto`), the
+`ActionRequest`/`ActionResponse` in `wire/proto/vynkor_protocol.proto`), the
 pending-action registry tracks them independently
 (`src/ipc/protocol.rs:568-577`), and there's already a per-caller concurrency
 cap (R6-03). Responses do not need to come back in request order. No kernel
@@ -185,7 +185,7 @@ The SDK's default `Plugin::serve()` loop is sequential
 (`recv().await` → `on_message().await` → reply → next `recv()`), which is
 fine for low-volume, network-bound plugins (`ai`, `tts`, `stt`) but wrong
 for storage-class plugins called far more often. The SDK now ships a
-concurrent message loop as a first-class facility (`veyron-sdk/src/concurrent.rs`,
+concurrent message loop as a first-class facility (`vynkor-sdk/src/concurrent.rs`,
 replacing the hand-rolled copies that `database` and `network` used to each
 maintain):
 
@@ -200,7 +200,7 @@ maintain):
   against a pre-registered client (`UnixStream::pair`).
 - `response_envelope(action_id, result)` — the one shared
   `ActionResponse`/`ACTION_ERROR` builder both plugins had duplicated.
-- The loop: one task owns the `VeyronClient` exclusively and
+- The loop: one task owns the `VynkorClient` exclusively and
   `tokio::select!`s between `client.recv()` and an mpsc channel of completed
   responses; each inbound `ActionRequest` is `tokio::spawn`ed, so requests
   run concurrently and replies may come back out of order (kernel matches on
@@ -227,21 +227,21 @@ Rust only for these — no Python/C++
 SDK versions of `database` or `vector-db`; hot-path plugins stay in the SDK
 with the async pool story.
 
-## Kernel-side changes needed (veyron repo, not this one)
+## Kernel-side changes needed (vynkor repo, not this one)
 
 Most of the above needs **no** kernel change — `PERMISSION_NETWORK`,
 `PERMISSION_FILES_READ`/`WRITE`, `PERMISSION_SYSTEM`, `PERMISSION_AUDIO`,
 `PERMISSION_NOTIFY`, `PERMISSION_SCHEDULER`, `PERMISSION_BROWSER`,
 `PERMISSION_IPC_SEND` already exist in
-`wire/proto/veyron_protocol.proto:107-124` and cover `filesystem`, `system`/
+`wire/proto/vynkor_protocol.proto:107-124` and cover `filesystem`, `system`/
 `window`, `notify`, `scheduler`, `browser` respectively. `stt`/`tts` shipped
 with **zero** kernel changes (no declared permissions — local ONNX runs
 in-process, cloud providers route through `network`).
 
-What's actually new, in `veyron`:
+What's actually new, in `vynkor`:
 
 - **Proto enum addition — protocol v1.4.** **Shipped** (wire housekeeping,
-  `veyron-wire` 0.2.1): 5 new `PermissionType` values **15–19** defined
+  `vynkor-wire` 0.2.1): 5 new `PermissionType` values **15–19** defined
   (`PERMISSION_STORAGE = 14` shipped with `database`; 7 and old
   `PERMISSION_AI` are `reserved`, don't reuse):
 
@@ -254,12 +254,12 @@ What's actually new, in `veyron`:
   | 19 | `PERMISSION_HOME` | `home` |
 
   Values are **contiguous (15–19)** — the installer's
-  `known_permissions()` probe (`veyron/src/marketplace/installer.rs:25`)
+  `known_permissions()` probe (`vynkor/src/marketplace/installer.rs:25`)
   walks enum codes and stops after 4 consecutive misses, so a gap ≥4 would
   silently reject installs of any plugin declaring a later value. The
   `// v 1.4` header bump landed in the same change. The kernel's own `M9`
   (zero-value enum renumber, wire-breaking) **missed** this bump and landed
-  on protocol **v1.5** (`veyron-wire` 0.2.2, 2026-08-13): `ActionStatus`/
+  on protocol **v1.5** (`vynkor-wire` 0.2.2, 2026-08-13): `ActionStatus`/
   `CommandStatus` now have `*_UNKNOWN = 0` so a missed `set_status()` fails
   loudly instead of faking OK.
 
@@ -272,7 +272,7 @@ What's actually new, in `veyron`:
   keep the gap rule in mind if split.
   `metrics`, and the extended `system` need no new values — they reuse
   existing ones (`sound` already shipped that way on `PERMISSION_AUDIO`).
-- **Regenerate `veyron-wire` prost types.** **Shipped** — the generated
+- **Regenerate `vynkor-wire` prost types.** **Shipped** — the generated
   `PermissionType` (prost, build-time from the proto) includes the new
   values; `known_permissions()` (kernel `R8-01`) and the JWT `permissions`
   claims (free-form strings) adopt them automatically, no kernel Rust
@@ -280,18 +280,18 @@ What's actually new, in `veyron`:
   declaring the new permissions (e.g. `PERMISSION_SECRETS`).
 - **Proto-copy sync — all three copies on v1.4.** **Shipped** — the kernel
   repo vendors no proto (`src/proto.rs` is
-  `pub use veyron_wire::proto::veyron;`), so the crate is the single source
+  `pub use vynkor_wire::proto::vynkor;`), so the crate is the single source
   of protocol truth for kernel + SDK-rust. The R8-05 byte-identity test
   (`tests/unit/test_proto_sync.rs`) guards the remaining copies:
-  - `veyron-wire/proto/veyron_protocol.proto` — the source of regeneration;
-  - `veyron-sdk-python/proto/...` + `veyron-sdk-cpp/proto/...` — synced to
+  - `vynkor-wire/proto/vynkor_protocol.proto` — the source of regeneration;
+  - `vynkor-sdk-python/proto/...` + `vynkor-sdk-cpp/proto/...` — synced to
     v1.4 (previously on v1.2/v1.3); the Python binding
-    (`veyron-sdk-python/veyron/veyron_protocol_pb2.py`) was regenerated via
+    (`vynkor-sdk-python/vynkor/vynkor_protocol_pb2.py`) was regenerated via
     `scripts/gen_proto_python.py` and the R8-05 marker check extended to
     the five new permission values.
-  `pub const PROTOCOL_VERSION` was added to `veyron-wire` alongside — it
+  `pub const PROTOCOL_VERSION` was added to `vynkor-wire` alongside — it
   mirrors the proto header comment (now `"1.5"` / `// v 1.5`). Long-term:
-  vendor the .proto as an asset inside the veyron-wire crate and have SDK
+  vendor the .proto as an asset inside the vynkor-wire crate and have SDK
   build scripts generate from the *installed package* — removes vendoring
   entirely, so the SDKs can't drift even in principle.
   (`scripts/gen_proto_python.py` was repaired earlier — it regenerates the
@@ -306,7 +306,7 @@ What's actually new, in `veyron`:
   `list_plugins` (new `CommandHandler` arm: registered plugins with their
   actions) joined the existing `get_manifest`, and both are exempt from the
   `PERMISSION_KERNEL_ADMIN` gate alongside `health_check`
-  (`READONLY_COMMANDS` in `veyron/src/ipc/protocol.rs`). This is what lets
+  (`READONLY_COMMANDS` in `vynkor/src/ipc/protocol.rs`). This is what lets
   the `agent` plugin pull tool specs from registered manifests without
   holding admin. Read-only by construction and the data is public
   distribution metadata (it ships in registry.json); every mutating command
@@ -324,7 +324,7 @@ every planned plugin fits the existing `ActionRequest`/`Event`/
 
 A single distribution format for plugins, built so the format itself never
 needs a breaking change (additive fields, lenient parsing) and the artifact
-host is swappable (relative URLs). **Normative schema:** `veyron/docs/
+host is swappable (relative URLs). **Normative schema:** `vynkor/docs/
 PLUGIN_REGISTRY_SCHEMA.md` (kernel repo) — this file is the plan, that doc is
 the contract. `scripts/package.sh` is the one tool that writes both sides and
 must stay in sync with the schema.
@@ -389,7 +389,7 @@ and the R10-03 cache is ready:
     "category": "ai",
     "tags": ["llm"],
     "status": "stable",
-    "source_url": "https://github.com/veyron-core/vynkor-plugins/tree/main/plugins/ai",
+    "source_url": "https://github.com/vynkor-core/vynkor-plugins/tree/main/plugins/ai",
     "versions": {
       "0.1.0": {
         "archive_url": "dist/ai/versions/0.1.0/ai-0.1.0.zip",
@@ -445,11 +445,11 @@ and the R10-03 cache is ready:
   The per-action `permission` makes the kernel's anti-laundering check
   (`required_permission_for_action`, today hardcoded for `http_request` →
   `PERMISSION_NETWORK`) **data-driven**: any caller without the permission is
-  denied, whatever the action. Input/output schemas serve Veyron Web and the
+  denied, whatever the action. Input/output schemas serve Vynkor Web and the
   future `agent` tool dispatch. The declared `permissions` set stays as-is —
   kernel Steps 3/4 (unknown permission, config-grant cross-check) unchanged.
 - **`config_schema`** — JSON Schema (draft-07 subset), not a custom format.
-  Veyron Web auto-generates settings forms; the plugin validates its own
+  Vynkor Web auto-generates settings forms; the plugin validates its own
   config. The kernel does not validate (dumb core).
 - **`files`** (renamed from `resources`) — explicit list of files extracted
   from the archive into the plugin's working directory. Doubles as the
@@ -458,30 +458,30 @@ and the R10-03 cache is ready:
   zip-bomb limits). Renamed to avoid confusion with `dist/{slug}/assets/`.
 - **No `api_level`** — decided against. The kernel is a dumb router; its
   plugin-visible contract is the wire format + the permission enum, both of
-  which live in `veyron-wire` (below). Compatibility is fully covered by:
+  which live in `vynkor-wire` (below). Compatibility is fully covered by:
   `kernel_compatibility_range` (semver — the gate), the installer's
   `known_permissions()` probe (new permissions are adopted automatically when
-  the kernel bumps its veyron-wire dependency), and additive/lenient manifest
+  the kernel bumps its vynkor-wire dependency), and additive/lenient manifest
   parsing (unknown fields ignored). A separate api_level axis would need a
   mapping table maintained forever — YAGNI. If a plugin-visible kernel
   behavior ever genuinely needs gating, add one optional manifest field then.
 
-### 4. Protocol single source (`veyron-wire`)
+### 4. Protocol single source (`vynkor-wire`)
 
 The kernel already consumes every protocol type from the crate: `src/proto.rs`
-is `pub use veyron_wire::proto::veyron;` and `known_permissions()` probes the
+is `pub use vynkor_wire::proto::vynkor;` and `known_permissions()` probes the
 generated `PermissionType`. A protocol/permission change is therefore already
-"bump veyron-wire → kernel + SDK-rust adopt via the dependency." Remaining work:
+"bump vynkor-wire → kernel + SDK-rust adopt via the dependency." Remaining work:
 
-- ~~Add `pub const PROTOCOL_VERSION` to veyron-wire~~ — **done** (0.2.1,
+- ~~Add `pub const PROTOCOL_VERSION` to vynkor-wire~~ — **done** (0.2.1,
   `"1.4"`); it now mirrors the proto header comment.
 - ~~Sync the vendored copies + fix `gen_proto_python.py`~~ — **done**:
-  `veyron-sdk-python/proto` and `veyron-sdk-cpp/proto` are on v1.4 (they
+  `vynkor-sdk-python/proto` and `vynkor-sdk-cpp/proto` are on v1.4 (they
   were on v1.2/v1.3), the Python binding was regenerated, and the R8-05
   byte-identity test + pb2 marker check guard them (markers extended to the
   new permission values). `gen_proto_python.py` was repaired earlier and
   verified working.
-- Long-term: vendor the .proto as an asset inside the veyron-wire crate and
+- Long-term: vendor the .proto as an asset inside the vynkor-wire crate and
   have SDK build scripts generate from the *installed package* — removes
   vendoring entirely, so the SDKs cannot drift even in principle.
 
@@ -507,20 +507,20 @@ never touches keys — only `registry_url`.
 2. **wire housekeeping** — `PROTOCOL_VERSION` const, sync SDK copies to v1.4,
    fix `gen_proto_python.py`. **Shipped** — wire is at protocol **v1.5**
    (5 new `PermissionType` values 15–19 landed in v1.4, status-enum renumber
-   M9 in v1.5) with `veyron_wire::PROTOCOL_VERSION`;
-   `veyron-sdk-python` + `veyron-sdk-cpp` vendored copies and the Python `pb2`
+   M9 in v1.5) with `vynkor_wire::PROTOCOL_VERSION`;
+   `vynkor-sdk-python` + `vynkor-sdk-cpp` vendored copies and the Python `pb2`
    binding synced (R8-05 byte-identity + marker checks pass); Rust
-   `veyron-sdk` restored to the published 0.1.2 API surface (streaming methods
+   `vynkor-sdk` restored to the published 0.1.2 API surface (streaming methods
    had gone missing from the repo) and bumped to 0.1.3. **Both crates are
-   published** (2026-08-13) — `veyron-wire` **0.2.2**, `veyron-sdk` **0.1.3** —
+   published** (2026-08-13) — `vynkor-wire` **0.2.2**, `vynkor-sdk` **0.1.3** —
    and the kernel's `[patch.crates-io]` git overrides are **dropped**
    (`gen_proto_python.py` had already been repaired in an earlier PR —
    verified working, no change needed).
 3. **Manifest v2** — per-action permissions + `config_schema`; touches every
-   plugin, kernel load-time checks, and Veyron Web. **Shipped for plugins +
+   plugin, kernel load-time checks, and Vynkor Web. **Shipped for plugins +
    kernel** (all 6 manifests are v2, kernel parses object-form `actions`,
    enforces `files` extraction allowlist, and the anti-laundering check is
-   data-driven from per-action `permission`). Veyron Web consuming
+   data-driven from per-action `permission`). Vynkor Web consuming
    `input`/`output`/`config_schema` for form generation is still open.
 
 

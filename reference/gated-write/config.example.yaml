@@ -7,7 +7,7 @@ sandbox: true
 
 # Environment the plugin is spawned with (see config_schema in plugin.json).
 env:
-  GATED_WRITE_DATA_DIR: /var/lib/veyron/gated-write
+  GATED_WRITE_DATA_DIR: /var/lib/vyn/gated-write
   # Comma-separated plugin ids (or prefix.* globs) allowed to call
   # confirm_write. Default: device.* — every D-06 bridge mirror.
   GATED_WRITE_CONFIRM_CALLERS: device.*

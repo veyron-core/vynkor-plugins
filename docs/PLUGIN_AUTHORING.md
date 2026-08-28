@@ -7,7 +7,7 @@ the original custom-loop variant is `plugins/sync-client/src/lib.rs`.
 
 ## 1. The single-reader rule — `send_action` discards frames
 
-`VeyronClient::send_action` loops on `recv_timeout` while awaiting its
+`VynkorClient::send_action` loops on `recv_timeout` while awaiting its
 response and **discards every inbound frame that does not match**
 (see its doc: "Frames that arrive while waiting ... are discarded").
 Consequences:
@@ -24,7 +24,7 @@ round-trip vanished.
 
 **The pattern** (single-reader loop + channel-fronted RPC proxy):
 
-- The serve loop exclusively owns `VeyronClient`; `tokio::select!` over
+- The serve loop exclusively owns `VynkorClient`; `tokio::select!` over
   `client.recv()`, an outbound `mpsc<Envelope>` channel, an RPC request
   channel, and (calendar) the scan interval tick.
 - Handler/scan tasks get a cloneable `Rpc { tx }` handle; each call sends
@@ -50,7 +50,7 @@ into the loop's channel like sync-client's heartbeat. Choose by shape:
 ## 2. Kernel routing facts — what a caller must declare
 
 - Actions route by manifest declaration: the kernel resolves the provider
-  via `find_action_provider` (`veyron/src/ipc/protocol.rs`) and refuses
+  via `find_action_provider` (`vynkor/src/ipc/protocol.rs`) and refuses
   ambiguous declarations. Declare every action you serve.
 - Manifest v2 per-action `permission` is enforced on **both provider and
   caller** (data-driven T-19 anti-laundering). A wrapper plugin that calls
@@ -66,7 +66,7 @@ into the loop's channel like sync-client's heartbeat. Choose by shape:
 
 ## 3. Testing against a fake kernel
 
-`UnixStream::pair()` + `VeyronClient::from_stream` on both ends drives the
+`UnixStream::pair()` + `VynkorClient::from_stream` on both ends drives the
 real serve loop without a live kernel (SDK test pattern, used by
 `sync-client`, `notes`, `calendar`):
 
@@ -178,15 +178,15 @@ harness snapshot in `scripts/live-audit/`). The fake kernel (§3) proves
 handler logic; these are the things that only bite on a real secured one.
 
 - **The supervisor injects nothing auth-related.** A plugin under a
-  kernel with `jwt_secret` needs both `VEYRON_JWT_SECRET` (frame-MAC key
-  derivation) and `VEYRON_JWT_TOKEN`, added by the operator to the
+  kernel with `jwt_secret` needs both `VYN_JWT_SECRET` (frame-MAC key
+  derivation) and `VYNKOR_JWT_TOKEN`, added by the operator to the
   drop-in's `env:` list. The token's `sub` must equal the registering
   `plugin_id`, and its claims **override** the manifest — mint per plugin
   with that plugin's declared permissions. Missing either → registration
   rejected → exit → silent restart loop until `max_restarts` runs out,
   with an empty log ring buffer and nothing at WARN kernel-side. When a
   plugin "won't start", check this before anything else; run the binary
-  manually with the drop-in env plus `VEYRON_SOCKET_PATH` to see the real
+  manually with the drop-in env plus `VYN_SOCKET_PATH` to see the real
   error on stderr.
 - **Action requests go to frame target `kernel`.** The kernel only does
   pending-action bookkeeping (internal `kact-*` correlation, response
@@ -198,7 +198,7 @@ handler logic; these are the things that only bite on a real secured one.
   `bytes` (serialize the JSON), and responses may arrive
   zstd-compressed (payloads ≥ 64 KiB, `FLAG_COMPRESSED`) or MAC-tagged —
   handle both when writing a client by hand (see `scripts/live-audit/
-  veyron_ws.py`).
+  vynkor_ws.py`).
 - **`ipc_targets` is exact-match** — no wildcard. List every slug you
   will call.
 - **The HTTP API is TLS-only by default**; plain-HTTP probes fail with a

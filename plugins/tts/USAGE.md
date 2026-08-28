@@ -12,7 +12,7 @@ Turn text into audio bytes.
 ```json
 {
   "provider": "sherpa",
-  "text": "Hello from Veyron.",
+  "text": "Hello from Vynkor.",
   "voice": "af_heart",
   "format": "wav",
   "speed": 1.0,

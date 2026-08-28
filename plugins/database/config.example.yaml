@@ -1,5 +1,5 @@
 # database plugin config. Copy to config.yaml and set data_dir before running.
-data_dir: /var/lib/veyron/database   # required, directory holding per-caller .db files
+data_dir: /var/lib/vyn/database   # required, directory holding per-caller .db files
 pool_size: 4                          # connections per caller pool
 busy_timeout_ms: 5000                 # SQLite busy timeout
 max_value_bytes: 1048576              # 1 MiB, db_set/db_append value size cap
