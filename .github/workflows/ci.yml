@@ -14,37 +14,32 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate registry.json
-        run: python3 -c "import json, sys; json.load(open('registry.json')); print('registry.json: valid JSON')"
+        run: python3 -m json.tool registry.json > /dev/null && echo "registry.json: valid JSON"
 
-      - name: Check registry schema (apiVersion, revoked, slug entries)
+      - name: Check registry schema
         run: |
-          python3 << 'PY'
+          python3 -c "
           import json, sys
           data = json.load(open('registry.json'))
           assert 'meta' in data, 'missing meta'
           assert 'apiVersion' in data['meta'], 'missing meta.apiVersion'
           assert isinstance(data.get('revoked', []), list), 'revoked must be list'
+          count = 0
           for slug, entry in data.items():
               if slug in ('meta', 'revoked'):
                   continue
-              assert 'name' in entry, f'{slug} missing name'
-              assert 'versions' in entry, f'{slug} missing versions'
-              assert entry['versions'], f'{slug} empty versions'
-          print(f"registry.json: {len([k for k in data if k not in ('meta','revoked')])} plugins validated")
-          PY
+              assert 'name' in entry, slug + ' missing name'
+              assert 'versions' in entry, slug + ' missing versions'
+              assert entry['versions'], slug + ' empty versions'
+              count += 1
+          print(f'registry.json: {count} plugins validated')
+          "
 
       - name: Shellcheck scripts
-        run: |
-          if command -v shellcheck >/dev/null 2>&1; then
-            shellcheck scripts/*.sh || true
-          else
-            echo "shellcheck not installed, skipping"
-            bash -n scripts/*.sh && echo "scripts: bash -n ok"
-          fi
+        run: bash -n scripts/*.sh && echo "scripts: bash -n ok"
 
-      - name: Check plugin manifests (if any Cargo.toml)
+      - name: Check plugin manifests
         run: |
-          echo "Checking for Cargofmt/clippy on plugins with Cargo.toml (best-effort)"
           found=$(find plugins -maxdepth 2 -name Cargo.toml 2>/dev/null | head -n 5)
-          if [ -z "$found" ]; then echo "no Cargo.toml found in plugins root (plugins are not standalone crates)"; else echo "$found"; fi
+          if [ -z "$found" ]; then echo "no Cargo.toml in plugins (expected)"; else echo "$found"; fi
           echo "plugins CI: done"
