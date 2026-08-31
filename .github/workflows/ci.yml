@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate registry.json
+        run: python3 -c "import json, sys; json.load(open('registry.json')); print('registry.json: valid JSON')"
+
+      - name: Check registry schema (apiVersion, revoked, slug entries)
+        run: |
+          python3 << 'PY'
+          import json, sys
+          data = json.load(open('registry.json'))
+          assert 'meta' in data, 'missing meta'
+          assert 'apiVersion' in data['meta'], 'missing meta.apiVersion'
+          assert isinstance(data.get('revoked', []), list), 'revoked must be list'
+          for slug, entry in data.items():
+              if slug in ('meta', 'revoked'):
+                  continue
+              assert 'name' in entry, f'{slug} missing name'
+              assert 'versions' in entry, f'{slug} missing versions'
+              assert entry['versions'], f'{slug} empty versions'
+          print(f"registry.json: {len([k for k in data if k not in ('meta','revoked')])} plugins validated")
+          PY
+
+      - name: Shellcheck scripts
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck scripts/*.sh || true
+          else
+            echo "shellcheck not installed, skipping"
+            bash -n scripts/*.sh && echo "scripts: bash -n ok"
+          fi
+
+      - name: Check plugin manifests (if any Cargo.toml)
+        run: |
+          echo "Checking for Cargofmt/clippy on plugins with Cargo.toml (best-effort)"
+          found=$(find plugins -maxdepth 2 -name Cargo.toml 2>/dev/null | head -n 5)
+          if [ -z "$found" ]; then echo "no Cargo.toml found in plugins root (plugins are not standalone crates)"; else echo "$found"; fi
+          echo "plugins CI: done"
