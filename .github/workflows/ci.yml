@@ -12,34 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Validate registry.json
-        run: python3 -m json.tool registry.json > /dev/null && echo "registry.json: valid JSON"
-
+        run: python3 -m json.tool registry.json > /dev/null && echo "registry.json valid"
       - name: Check registry schema
-        run: |
-          python3 -c "
-          import json, sys
-          data = json.load(open('registry.json'))
-          assert 'meta' in data, 'missing meta'
-          assert 'apiVersion' in data['meta'], 'missing meta.apiVersion'
-          assert isinstance(data.get('revoked', []), list), 'revoked must be list'
-          count = 0
-          for slug, entry in data.items():
-              if slug in ('meta', 'revoked'):
-                  continue
-              assert 'name' in entry, slug + ' missing name'
-              assert 'versions' in entry, slug + ' missing versions'
-              assert entry['versions'], slug + ' empty versions'
-              count += 1
-          print(f'registry.json: {count} plugins validated')
-          "
-
+        run: python3 scripts/check-registry.py
       - name: Shellcheck scripts
-        run: bash -n scripts/*.sh && echo "scripts: bash -n ok"
-
+        run: |
+          bash -n scripts/*.sh && echo "scripts bash ok"
       - name: Check plugin manifests
         run: |
           found=$(find plugins -maxdepth 2 -name Cargo.toml 2>/dev/null | head -n 5)
           if [ -z "$found" ]; then echo "no Cargo.toml in plugins (expected)"; else echo "$found"; fi
-          echo "plugins CI: done"
+          echo "plugins CI done"
